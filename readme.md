@@ -1,4 +1,4 @@
-Little Wrapper Around std.json.ValueTree
+Thin (and maybe useless) Wrapper Around std.json.ValueTree
 
 This library is a very thin wrapper around std.json.ValueTree with the goal of providing a slightly more user-friendly API, especially in the face of questionable input (e.g. user-input).
 
