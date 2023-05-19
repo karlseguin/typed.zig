@@ -22,7 +22,7 @@ pub const Value = union(enum) {
 	f32: f32,
 	f64: f64,
 	string: []const u8,
-	object: Object,
+	map: Map,
 	array: Array,
 
 	fn deinit(self: Value) void {
@@ -33,9 +33,9 @@ pub const Value = union(enum) {
 				}
 				arr.deinit();
 			},
-			.object => |obj| {
-				var to = obj;
-				to.deinit();
+			.map => |map| {
+				var tm = map;
+				tm.deinit();
 			},
 			inline else => {},
 		}
@@ -71,7 +71,7 @@ pub const Value = union(enum) {
 			f32 => switch (self) {.f32 => |v| return v, else => {}},
 			f64 => switch (self) {.f64 => |v| return v, else => {}},
 			bool => switch (self) {.bool => |v| return v, else => {}},
-			Object => switch (self) {.object => |v| return v, else => {}},
+			Map => switch (self) {.map => |v| return v, else => {}},
 			Array => switch (self) {.array => |v| return v, else => {}},
 			else => |other| @compileError("Unsupported type: " ++ @typeName(other)),
 		}
@@ -114,15 +114,15 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) !Value {
 			return .{.array = ta};
 		},
 		.object => |obj| {
-			var to = Object.init(allocator);
-			var map = &to.map;
+			var to = Map.init(allocator);
+			var map = &to.m;
 			try map.ensureTotalCapacity(@intCast(u32, obj.count()));
 
 			var it = obj.iterator();
 			while (it.next()) |entry| {
 				map.putAssumeCapacity(entry.key_ptr.*, try fromJson(allocator, entry.value_ptr.*));
 			}
-			return .{.object = to};
+			return .{.map = to};
 		}
 	}
 }
@@ -152,33 +152,33 @@ fn optionalReturnType(comptime T: type) type {
 	};
 }
 
-pub const Object = struct {
-	map: StringHashMap(Value),
+pub const Map = struct {
+	m: StringHashMap(Value),
 
-	pub fn init(allocator: Allocator) Object {
+	pub fn init(allocator: Allocator) Map {
 		return .{
-			.map = StringHashMap(Value).init(allocator),
+			.m = StringHashMap(Value).init(allocator),
 		};
 	}
 
-	pub fn deinit(self: *Object) void {
-		var it = self.map.valueIterator();
+	pub fn deinit(self: *Map) void {
+		var it = self.m.valueIterator();
 		while (it.next()) |value| {
 			value.deinit();
 		}
-		self.map.deinit();
+		self.m.deinit();
 	}
 
 	// dangerous!
-	pub fn readonlyEmpty() Object {
+	pub fn readonlyEmpty() Map {
 		return init(undefined);
 	}
 
-	pub fn put(self: *Object, key: []const u8, value: anytype) !void {
+	pub fn put(self: *Map, key: []const u8, value: anytype) !void {
 		return self.putT(@TypeOf(value), key, value);
 	}
 
-	pub fn putT(self: *Object, comptime T: type, key: []const u8, value: anytype) !void {
+	pub fn putT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
 		const typed_value = switch (@typeInfo(T)) {
 			.Null => .{.null = {}},
 			.Int => |int| blk: {
@@ -229,8 +229,8 @@ pub const Object = struct {
 				}
 			},
 			.Struct => blk: {
-				if (T == Object) {
-					break :blk .{.object = value};
+				if (T == Map) {
+					break :blk .{.map = value};
 				}
 				if (T == Array) {
 					break :blk .{.array = value};
@@ -252,37 +252,37 @@ pub const Object = struct {
 			},
 			else => return error.UnsupportedValueType,
 		};
-		return self.map.put(key, typed_value);
+		return self.m.put(key, typed_value);
 	}
 
-	pub fn get(self: Object, comptime T: type, key: []const u8) optionalReturnType(T) {
-		if (self.map.get(key)) |v| {
+	pub fn get(self: Map, comptime T: type, key: []const u8) optionalReturnType(T) {
+		if (self.m.get(key)) |v| {
 			return v.get(T);
 		}
 		return null;
 	}
 
-	pub fn mustGet(self: Object, comptime T: type, key: []const u8) returnType(T) {
+	pub fn mustGet(self: Map, comptime T: type, key: []const u8) returnType(T) {
 		return self.get(T, key) orelse unreachable;
 	}
 
-	pub fn strictGet(self: Object, comptime T: type, key: []const u8) !returnType(T) {
-		if (self.map.get(key)) |v| {
+	pub fn strictGet(self: Map, comptime T: type, key: []const u8) !returnType(T) {
+		if (self.m.get(key)) |v| {
 			return v.strictGet(T);
 		}
 		return error.KeyNotFound;
 	}
 
-	pub fn contains(self: Object, key: []const u8) bool {
-		return self.map.contains(key);
+	pub fn contains(self: Map, key: []const u8) bool {
+		return self.m.contains(key);
 	}
 
-	pub fn count(self: Object) usize {
-		return self.map.count();
+	pub fn count(self: Map) usize {
+		return self.m.count();
 	}
 
-	pub fn isNull(self: Object, key: []const u8) bool {
-		if (self.map.get(key)) |v| {
+	pub fn isNull(self: Map, key: []const u8) bool {
+		if (self.m.get(key)) |v| {
 			return v.isNull();
 		}
 		return true;
@@ -291,7 +291,7 @@ pub const Object = struct {
 
 const t = std.testing;
 test "comptime_int" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", 120);
@@ -305,7 +305,7 @@ test "comptime_int" {
 }
 
 test "comptime_float" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", 3.229);
@@ -319,7 +319,7 @@ test "comptime_float" {
 }
 
 test "i8" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(i8, 120));
@@ -333,7 +333,7 @@ test "i8" {
 }
 
 test "i16" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(i16, -121));
@@ -347,7 +347,7 @@ test "i16" {
 }
 
 test "i32" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(i32, 12289031));
@@ -361,7 +361,7 @@ test "i32" {
 }
 
 test "i64" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(i64, -238390288181223));
@@ -375,7 +375,7 @@ test "i64" {
 }
 
 test "i128" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(i128, 39193828192238390288181223));
@@ -389,7 +389,7 @@ test "i128" {
 }
 
 test "u8" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(u8, 240));
@@ -403,7 +403,7 @@ test "u8" {
 }
 
 test "u16" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(u16, 14021));
@@ -417,7 +417,7 @@ test "u16" {
 }
 
 test "u32" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(u32, 3991992991));
@@ -431,7 +431,7 @@ test "u32" {
 }
 
 test "u64" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(u64, 399293189283821));
@@ -445,7 +445,7 @@ test "u64" {
 }
 
 test "u128" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(u128, 392193828192238390288181223));
@@ -459,7 +459,7 @@ test "u128" {
 }
 
 test "f32" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(f32, -0.32911));
@@ -473,7 +473,7 @@ test "f32" {
 }
 
 test "f64" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", @as(f64, 32.991818282));
@@ -487,7 +487,7 @@ test "f64" {
 }
 
 test "bool" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", true);
@@ -501,7 +501,7 @@ test "bool" {
 }
 
 test "string" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", "teg");
@@ -527,7 +527,7 @@ test "string" {
 }
 
 test "null" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", null);
@@ -539,7 +539,7 @@ test "null" {
 }
 
 test "contains" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", null);
@@ -551,7 +551,7 @@ test "contains" {
 }
 
 test "count" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 	try t.expectEqual(@as(usize, 0), typed.count());
 
@@ -562,7 +562,7 @@ test "count" {
 }
 
 test "nullable" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 	try typed.put("a", @as(?u32, null));
 	try typed.put("b", @as(?u32, 821));
@@ -577,22 +577,22 @@ test "nullable" {
 }
 
 test "object" {
-	var child = Object.init(t.allocator);
+	var child = Map.init(t.allocator);
 	try child.put("power", 9001);
 	try child.put("name", "goku");
 
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 	try typed.put("child", child);
 
 	{
-		try t.expectEqual(@as(i64, 9001), typed.mustGet(Object, "child").mustGet(i64, "power"));
-		try t.expectEqualStrings("goku", typed.mustGet(Object, "child").mustGet([]const u8, "name"));
+		try t.expectEqual(@as(i64, 9001), typed.mustGet(Map, "child").mustGet(i64, "power"));
+		try t.expectEqualStrings("goku", typed.mustGet(Map, "child").mustGet([]const u8, "name"));
 	}
 }
 
 test "array" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	var child = Array.init(t.allocator);
@@ -644,19 +644,19 @@ test "fromJson" {
 		try json_object1.put("k1", json.Value{.integer = 33});
 		try json_object1.put("k2", json.Value{.array = json_array});
 
-		var to = (try fromJson(t.allocator, json.Value{.object = json_object1})).object;
-		defer to.deinit();
-		try t.expectEqual(@as(usize, 2), to.count());
-		try t.expectEqual(@as(i64, 33), to.mustGet(i64, "k1"));
+		var tm = (try fromJson(t.allocator, json.Value{.object = json_object1})).map;
+		defer tm.deinit();
+		try t.expectEqual(@as(usize, 2), tm.count());
+		try t.expectEqual(@as(i64, 33), tm.mustGet(i64, "k1"));
 
-		var ta = to.mustGet(Array, "k2");
+		var ta = tm.mustGet(Array, "k2");
 		try t.expectEqual(true, ta.items[0].mustGet(bool));
-		try t.expectEqual(@as(f64, 0.3211), ta.items[1].mustGet(Object).mustGet(f64, "k3"));
+		try t.expectEqual(@as(f64, 0.3211), ta.items[1].mustGet(Map).mustGet(f64, "k3"));
 	}
 }
 
 test "put Value" {
-	var typed = Object.init(t.allocator);
+	var typed = Map.init(t.allocator);
 	defer typed.deinit();
 
 	try typed.put("key", Value{.i64 = 331});
