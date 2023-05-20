@@ -93,7 +93,7 @@ pub const Value = union(enum) {
 pub const Array = ArrayList(Value);
 
 // gets a typed.Value from a std.json.Value
-pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) !Value {
+pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!Value {
 	const value = optional_value orelse {
 		return .{.null = {}};
 	};
@@ -113,17 +113,7 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) !Value {
 			}
 			return .{.array = ta};
 		},
-		.object => |obj| {
-			var to = Map.init(allocator);
-			var map = &to.m;
-			try map.ensureTotalCapacity(@intCast(u32, obj.count()));
-
-			var it = obj.iterator();
-			while (it.next()) |entry| {
-				map.putAssumeCapacity(entry.key_ptr.*, try fromJson(allocator, entry.value_ptr.*));
-			}
-			return .{.map = to};
-		}
+		.object => |obj| return .{.map = try Map.fromJson(allocator, obj)},
 	}
 }
 
@@ -167,6 +157,18 @@ pub const Map = struct {
 			value.deinit();
 		}
 		self.m.deinit();
+	}
+
+	pub fn fromJson(allocator: Allocator, obj: std.json.ObjectMap) !Map {
+			var to = init(allocator);
+			var map = &to.m;
+			try map.ensureTotalCapacity(@intCast(u32, obj.count()));
+
+			var it = obj.iterator();
+			while (it.next()) |entry| {
+				map.putAssumeCapacity(entry.key_ptr.*, try M.fromJson(allocator, entry.value_ptr.*));
+			}
+			return to;
 	}
 
 	// dangerous!
@@ -652,6 +654,18 @@ test "fromJson" {
 		var ta = tm.mustGet(Array, "k2");
 		try t.expectEqual(true, ta.items[0].mustGet(bool));
 		try t.expectEqual(@as(f64, 0.3211), ta.items[1].mustGet(Map).mustGet(f64, "k3"));
+
+
+		// load a map directly
+		var tm2 = try Map.fromJson(t.allocator, json_object1);
+
+		defer tm2.deinit();
+		try t.expectEqual(@as(usize, 2), tm2.count());
+		try t.expectEqual(@as(i64, 33), tm2.mustGet(i64, "k1"));
+
+		var ta2 = tm2.mustGet(Array, "k2");
+		try t.expectEqual(true, ta2.items[0].mustGet(bool));
+		try t.expectEqual(@as(f64, 0.3211), ta2.items[1].mustGet(Map).mustGet(f64, "k3"));
 	}
 }
 
