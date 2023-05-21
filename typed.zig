@@ -88,6 +88,41 @@ pub const Value = union(enum) {
 			else => false
 		};
 	}
+
+	pub fn jsonStringify(self: Value, options: std.json.StringifyOptions, out: anytype) anyerror!void {
+		switch (self) {
+			.null => return out.writeAll("null"),
+			.bool => |v| return out.writeAll(if (v) "true" else "false"),
+			.i8 => |v| return std.json.stringify(v, options, out),
+			.i16 => |v| return std.json.stringify(v, options, out),
+			.i32 => |v| return std.json.stringify(v, options, out),
+			.i64 => |v| return std.json.stringify(v, options, out),
+			.i128 => |v| return std.json.stringify(v, options, out),
+			.u8 => |v| return std.json.stringify(v, options, out),
+			.u16 => |v| return std.json.stringify(v, options, out),
+			.u32 => |v| return std.json.stringify(v, options, out),
+			.u64 => |v| return std.json.stringify(v, options, out),
+			.u128 => |v| return std.json.stringify(v, options, out),
+			.f32 => |v| return std.json.stringify(v, options, out),
+			.f64 => |v| return std.json.stringify(v, options, out),
+			.string => |v| return std.json.stringify(v, options, out),
+			.map => |v| return v.jsonStringify(options, out),
+			.array => |arr| {
+				try out.writeByte('[');
+				const items = arr.items;
+				if (items.len > 0) {
+					try items[0].jsonStringify(options, out);
+					for (items[1..]) |v| {
+						try out.writeByte(',');
+						try v.jsonStringify(options, out);
+					}
+				}
+
+				try out.writeByte(']');
+			},
+		}
+	}
+
 };
 
 pub const Array = ArrayList(Value);
@@ -197,9 +232,9 @@ pub fn newT(comptime T: type, value: anytype) !Value {
 }
 
 // hack so that we can call:
-//    typed.get([]u"8, "somekey")
+//    get([]u8, "somekey")
 // instead of the more verbose:
-//    typed.get([]const u8, "somekey")
+//    get([]const u8, "somekey")
 // In both cases, []const u8 is returned.
 fn returnType(comptime T: type) type {
 	return switch (T) {
@@ -210,7 +245,7 @@ fn returnType(comptime T: type) type {
 }
 
 // Some functions, like get, always return an optional type.
-// but if we just define the type as `?T`, if the user asks does typed.get(?u32, "key")
+// but if we just define the type as `?T`, if the user asks does map.get(?u32, "key")
 // then the return type will be ??T, which is not what we want.
 // When T is an optional (e.g. ?u32), this returns T
 // When T is not an optional (e.g. u32). this returns ?T
@@ -295,293 +330,310 @@ pub const Map = struct {
 		}
 		return true;
 	}
+
+	pub fn jsonStringify(self: Map, options: std.json.StringifyOptions, out: anytype) !void {
+		try out.writeByte('{');
+		var first = true;
+		var it = self.m.iterator();
+		while (it.next()) |entry| {
+			if (first) {
+				first = false;
+			} else {
+				try out.writeByte(',');
+			}
+			try std.json.encodeJsonString(entry.key_ptr.*, options, out);
+			try out.writeByte(':');
+			try std.json.stringify(entry.value_ptr.*, options, out);
+		}
+		try out.writeByte('}');
+	}
 };
 
 const t = std.testing;
 test "comptime_int" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", 120);
-	try typed.put("nope", true);
+	try map.put("key", 120);
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(i64, 120), typed.get(i64, "key").?);
-	try t.expectEqual(@as(?i64, null), typed.get(i64, "nope"));
-	try t.expectEqual(@as(i64, 120), (try typed.strictGet(i64, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(i64, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(i64, "nope"));
+	try t.expectEqual(@as(i64, 120), map.get(i64, "key").?);
+	try t.expectEqual(@as(?i64, null), map.get(i64, "nope"));
+	try t.expectEqual(@as(i64, 120), (try map.strictGet(i64, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(i64, "other"));
+	try t.expectError(error.WrongType, map.strictGet(i64, "nope"));
 }
 
 test "comptime_float" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", 3.229);
-	try typed.put("nope", true);
+	try map.put("key", 3.229);
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(f64, 3.229), typed.get(f64, "key").?);
-	try t.expectEqual(@as(?f64, null), typed.get(f64, "nope"));
-	try t.expectEqual(@as(f64, 3.229), (try typed.strictGet(f64, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(f64, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(f64, "nope"));
+	try t.expectEqual(@as(f64, 3.229), map.get(f64, "key").?);
+	try t.expectEqual(@as(?f64, null), map.get(f64, "nope"));
+	try t.expectEqual(@as(f64, 3.229), (try map.strictGet(f64, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(f64, "other"));
+	try t.expectError(error.WrongType, map.strictGet(f64, "nope"));
 }
 
 test "i8" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(i8, 120));
-	try typed.put("nope", true);
+	try map.put("key", @as(i8, 120));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(i8, 120), typed.get(i8, "key").?);
-	try t.expectEqual(@as(?i8, null), typed.get(i8, "nope"));
-	try t.expectEqual(@as(i8, 120), (try typed.strictGet(i8, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(i8, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(i8, "nope"));
+	try t.expectEqual(@as(i8, 120), map.get(i8, "key").?);
+	try t.expectEqual(@as(?i8, null), map.get(i8, "nope"));
+	try t.expectEqual(@as(i8, 120), (try map.strictGet(i8, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(i8, "other"));
+	try t.expectError(error.WrongType, map.strictGet(i8, "nope"));
 }
 
 test "i16" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(i16, -121));
-	try typed.put("nope", true);
+	try map.put("key", @as(i16, -121));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(i16, -121), typed.get(i16, "key").?);
-	try t.expectEqual(@as(?i16, null), typed.get(i16, "nope"));
-	try t.expectEqual(@as(i16, -121), (try typed.strictGet(i16, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(i16, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(i16, "nope"));
+	try t.expectEqual(@as(i16, -121), map.get(i16, "key").?);
+	try t.expectEqual(@as(?i16, null), map.get(i16, "nope"));
+	try t.expectEqual(@as(i16, -121), (try map.strictGet(i16, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(i16, "other"));
+	try t.expectError(error.WrongType, map.strictGet(i16, "nope"));
 }
 
 test "i32" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(i32, 12289031));
-	try typed.put("nope", true);
+	try map.put("key", @as(i32, 12289031));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(i32, 12289031), typed.get(i32, "key").?);
-	try t.expectEqual(@as(?i32, null), typed.get(i32, "nope"));
-	try t.expectEqual(@as(i32, 12289031), (try typed.strictGet(i32, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(i32, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(i32, "nope"));
+	try t.expectEqual(@as(i32, 12289031), map.get(i32, "key").?);
+	try t.expectEqual(@as(?i32, null), map.get(i32, "nope"));
+	try t.expectEqual(@as(i32, 12289031), (try map.strictGet(i32, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(i32, "other"));
+	try t.expectError(error.WrongType, map.strictGet(i32, "nope"));
 }
 
 test "i64" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(i64, -238390288181223));
-	try typed.put("nope", true);
+	try map.put("key", @as(i64, -238390288181223));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(i64, -238390288181223), typed.get(i64, "key").?);
-	try t.expectEqual(@as(?i64, null), typed.get(i64, "nope"));
-	try t.expectEqual(@as(i64, -238390288181223), (try typed.strictGet(i64, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(i64, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(i64, "nope"));
+	try t.expectEqual(@as(i64, -238390288181223), map.get(i64, "key").?);
+	try t.expectEqual(@as(?i64, null), map.get(i64, "nope"));
+	try t.expectEqual(@as(i64, -238390288181223), (try map.strictGet(i64, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(i64, "other"));
+	try t.expectError(error.WrongType, map.strictGet(i64, "nope"));
 }
 
 test "i128" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(i128, 39193828192238390288181223));
-	try typed.put("nope", true);
+	try map.put("key", @as(i128, 39193828192238390288181223));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(i128, 39193828192238390288181223), typed.get(i128, "key").?);
-	try t.expectEqual(@as(?i128, null), typed.get(i128, "nope"));
-	try t.expectEqual(@as(i128, 39193828192238390288181223), (try typed.strictGet(i128, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(i128, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(i128, "nope"));
+	try t.expectEqual(@as(i128, 39193828192238390288181223), map.get(i128, "key").?);
+	try t.expectEqual(@as(?i128, null), map.get(i128, "nope"));
+	try t.expectEqual(@as(i128, 39193828192238390288181223), (try map.strictGet(i128, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(i128, "other"));
+	try t.expectError(error.WrongType, map.strictGet(i128, "nope"));
 }
 
 test "u8" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(u8, 240));
-	try typed.put("nope", true);
+	try map.put("key", @as(u8, 240));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(u8, 240), typed.get(u8, "key").?);
-	try t.expectEqual(@as(?u8, null), typed.get(u8, "nope"));
-	try t.expectEqual(@as(u8, 240), (try typed.strictGet(u8, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(u8, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(u8, "nope"));
+	try t.expectEqual(@as(u8, 240), map.get(u8, "key").?);
+	try t.expectEqual(@as(?u8, null), map.get(u8, "nope"));
+	try t.expectEqual(@as(u8, 240), (try map.strictGet(u8, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(u8, "other"));
+	try t.expectError(error.WrongType, map.strictGet(u8, "nope"));
 }
 
 test "u16" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(u16, 14021));
-	try typed.put("nope", true);
+	try map.put("key", @as(u16, 14021));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(u16, 14021), typed.get(u16, "key").?);
-	try t.expectEqual(@as(?u16, null), typed.get(u16, "nope"));
-	try t.expectEqual(@as(u16, 14021), (try typed.strictGet(u16, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(u16, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(u16, "nope"));
+	try t.expectEqual(@as(u16, 14021), map.get(u16, "key").?);
+	try t.expectEqual(@as(?u16, null), map.get(u16, "nope"));
+	try t.expectEqual(@as(u16, 14021), (try map.strictGet(u16, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(u16, "other"));
+	try t.expectError(error.WrongType, map.strictGet(u16, "nope"));
 }
 
 test "u32" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(u32, 3991992991));
-	try typed.put("nope", true);
+	try map.put("key", @as(u32, 3991992991));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(u32, 3991992991), typed.get(u32, "key").?);
-	try t.expectEqual(@as(?u32, null), typed.get(u32, "nope"));
-	try t.expectEqual(@as(u32, 3991992991), (try typed.strictGet(u32, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(u32, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(u32, "nope"));
+	try t.expectEqual(@as(u32, 3991992991), map.get(u32, "key").?);
+	try t.expectEqual(@as(?u32, null), map.get(u32, "nope"));
+	try t.expectEqual(@as(u32, 3991992991), (try map.strictGet(u32, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(u32, "other"));
+	try t.expectError(error.WrongType, map.strictGet(u32, "nope"));
 }
 
 test "u64" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(u64, 399293189283821));
-	try typed.put("nope", true);
+	try map.put("key", @as(u64, 399293189283821));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(u64, 399293189283821), typed.get(u64, "key").?);
-	try t.expectEqual(@as(?u64, null), typed.get(u64, "nope"));
-	try t.expectEqual(@as(u64, 399293189283821), (try typed.strictGet(u64, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(u64, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(u64, "nope"));
+	try t.expectEqual(@as(u64, 399293189283821), map.get(u64, "key").?);
+	try t.expectEqual(@as(?u64, null), map.get(u64, "nope"));
+	try t.expectEqual(@as(u64, 399293189283821), (try map.strictGet(u64, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(u64, "other"));
+	try t.expectError(error.WrongType, map.strictGet(u64, "nope"));
 }
 
 test "u128" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(u128, 392193828192238390288181223));
-	try typed.put("nope", true);
+	try map.put("key", @as(u128, 392193828192238390288181223));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(u128, 392193828192238390288181223), typed.get(u128, "key").?);
-	try t.expectEqual(@as(?u128, null), typed.get(u128, "nope"));
-	try t.expectEqual(@as(u128, 392193828192238390288181223), (try typed.strictGet(u128, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(u128, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(u128, "nope"));
+	try t.expectEqual(@as(u128, 392193828192238390288181223), map.get(u128, "key").?);
+	try t.expectEqual(@as(?u128, null), map.get(u128, "nope"));
+	try t.expectEqual(@as(u128, 392193828192238390288181223), (try map.strictGet(u128, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(u128, "other"));
+	try t.expectError(error.WrongType, map.strictGet(u128, "nope"));
 }
 
 test "f32" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(f32, -0.32911));
-	try typed.put("nope", true);
+	try map.put("key", @as(f32, -0.32911));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(f32, -0.32911), typed.get(f32, "key").?);
-	try t.expectEqual(@as(?f32, null), typed.get(f32, "nope"));
-	try t.expectEqual(@as(f32, -0.32911), (try typed.strictGet(f32, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(f32, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(f32, "nope"));
+	try t.expectEqual(@as(f32, -0.32911), map.get(f32, "key").?);
+	try t.expectEqual(@as(?f32, null), map.get(f32, "nope"));
+	try t.expectEqual(@as(f32, -0.32911), (try map.strictGet(f32, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(f32, "other"));
+	try t.expectError(error.WrongType, map.strictGet(f32, "nope"));
 }
 
 test "f64" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", @as(f64, 32.991818282));
-	try typed.put("nope", true);
+	try map.put("key", @as(f64, 32.991818282));
+	try map.put("nope", true);
 
-	try t.expectEqual(@as(f64, 32.991818282), typed.get(f64, "key").?);
-	try t.expectEqual(@as(?f64, null), typed.get(f64, "nope"));
-	try t.expectEqual(@as(f64, 32.991818282), (try typed.strictGet(f64, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(f64, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(f64, "nope"));
+	try t.expectEqual(@as(f64, 32.991818282), map.get(f64, "key").?);
+	try t.expectEqual(@as(?f64, null), map.get(f64, "nope"));
+	try t.expectEqual(@as(f64, 32.991818282), (try map.strictGet(f64, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(f64, "other"));
+	try t.expectError(error.WrongType, map.strictGet(f64, "nope"));
 }
 
 test "bool" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", true);
-	try typed.put("nope", 33);
+	try map.put("key", true);
+	try map.put("nope", 33);
 
-	try t.expectEqual(true, typed.get(bool, "key").?);
-	try t.expectEqual(@as(?bool, null), typed.get(bool, "nope"));
-	try t.expectEqual(true, (try typed.strictGet(bool, "key")));
-	try t.expectError(error.KeyNotFound, typed.strictGet(bool, "other"));
-	try t.expectError(error.WrongType, typed.strictGet(bool, "nope"));
+	try t.expectEqual(true, map.get(bool, "key").?);
+	try t.expectEqual(@as(?bool, null), map.get(bool, "nope"));
+	try t.expectEqual(true, (try map.strictGet(bool, "key")));
+	try t.expectError(error.KeyNotFound, map.strictGet(bool, "other"));
+	try t.expectError(error.WrongType, map.strictGet(bool, "nope"));
 }
 
 test "string" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", "teg");
-	try typed.put("nope", 33);
+	try map.put("key", "teg");
+	try map.put("nope", 33);
 
 	{
 		// using shortcut []u8 type
-		try t.expectEqualStrings("teg", typed.get([]u8, "key").?);
-		try t.expectEqual(@as(?[]const u8, null), typed.get([]u8, "nope"));
-		try t.expectEqualStrings("teg", (try typed.strictGet([]u8, "key")));
-		try t.expectError(error.KeyNotFound, typed.strictGet([]u8, "other"));
-		try t.expectError(error.WrongType, typed.strictGet([]u8, "nope"));
+		try t.expectEqualStrings("teg", map.get([]u8, "key").?);
+		try t.expectEqual(@as(?[]const u8, null), map.get([]u8, "nope"));
+		try t.expectEqualStrings("teg", (try map.strictGet([]u8, "key")));
+		try t.expectError(error.KeyNotFound, map.strictGet([]u8, "other"));
+		try t.expectError(error.WrongType, map.strictGet([]u8, "nope"));
 	}
 
 	{
 		// using full []const u8 type
-		try t.expectEqualStrings("teg", typed.get([]const u8, "key").?);
-		try t.expectEqual(@as(?[]const u8, null), typed.get([]const u8, "nope"));
-		try t.expectEqualStrings("teg", (try typed.strictGet([]const u8, "key")));
-		try t.expectError(error.KeyNotFound, typed.strictGet([]const u8, "other"));
-		try t.expectError(error.WrongType, typed.strictGet([]const u8, "nope"));
+		try t.expectEqualStrings("teg", map.get([]const u8, "key").?);
+		try t.expectEqual(@as(?[]const u8, null), map.get([]const u8, "nope"));
+		try t.expectEqualStrings("teg", (try map.strictGet([]const u8, "key")));
+		try t.expectError(error.KeyNotFound, map.strictGet([]const u8, "other"));
+		try t.expectError(error.WrongType, map.strictGet([]const u8, "nope"));
 	}
 }
 
 test "null" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", null);
-	try typed.put("nope", 33);
+	try map.put("key", null);
+	try map.put("nope", 33);
 
-	try t.expectEqual(true, typed.isNull("key"));
-	try t.expectEqual(true, typed.isNull("does_not_exist"));
-	try t.expectEqual(false, typed.isNull("nope"));
+	try t.expectEqual(true, map.isNull("key"));
+	try t.expectEqual(true, map.isNull("does_not_exist"));
+	try t.expectEqual(false, map.isNull("nope"));
 }
 
 test "contains" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", null);
-	try typed.put("nope", 33);
+	try map.put("key", null);
+	try map.put("nope", 33);
 
-	try t.expectEqual(true, typed.contains("key"));
-	try t.expectEqual(true, typed.contains("nope"));
-	try t.expectEqual(false, typed.contains("does_not_exist"));
+	try t.expectEqual(true, map.contains("key"));
+	try t.expectEqual(true, map.contains("nope"));
+	try t.expectEqual(false, map.contains("does_not_exist"));
 }
 
 test "count" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
-	try t.expectEqual(@as(usize, 0), typed.count());
+	var map = Map.init(t.allocator);
+	defer map.deinit();
+	try t.expectEqual(@as(usize, 0), map.count());
 
-	try typed.put("key", null);
-	try t.expectEqual(@as(usize, 1), typed.count());
-	try typed.put("nope", 33);
-	try t.expectEqual(@as(usize, 2), typed.count());
+	try map.put("key", null);
+	try t.expectEqual(@as(usize, 1), map.count());
+	try map.put("nope", 33);
+	try t.expectEqual(@as(usize, 2), map.count());
 }
 
 test "nullable" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
-	try typed.put("a", @as(?u32, null));
-	try typed.put("b", @as(?u32, 821));
+	var map = Map.init(t.allocator);
+	defer map.deinit();
+	try map.put("a", @as(?u32, null));
+	try map.put("b", @as(?u32, 821));
 
-	try t.expectEqual(@as(?u32, null), typed.get(u32, "a"));
-	try t.expectEqual(@as(u32, 821), typed.get(u32, "b").?);
-	try t.expectEqual(@as(?u32, null), try typed.strictGet(?u32, "a"));
-	try t.expectEqual(@as(u32, 821), (try typed.strictGet(u32, "b")));
-	try t.expectEqual(@as(u32, 821), (try typed.strictGet(?u32, "b")).?);
-	try t.expectError(error.WrongType, typed.strictGet(bool, "a"));
-	try t.expectError(error.WrongType, typed.strictGet(f32, "b"));
+	try t.expectEqual(@as(?u32, null), map.get(u32, "a"));
+	try t.expectEqual(@as(u32, 821), map.get(u32, "b").?);
+	try t.expectEqual(@as(?u32, null), try map.strictGet(?u32, "a"));
+	try t.expectEqual(@as(u32, 821), (try map.strictGet(u32, "b")));
+	try t.expectEqual(@as(u32, 821), (try map.strictGet(?u32, "b")).?);
+	try t.expectError(error.WrongType, map.strictGet(bool, "a"));
+	try t.expectError(error.WrongType, map.strictGet(f32, "b"));
 }
 
 test "object" {
@@ -589,32 +641,32 @@ test "object" {
 	try child.put("power", 9001);
 	try child.put("name", "goku");
 
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
-	try typed.put("child", child);
+	var map = Map.init(t.allocator);
+	defer map.deinit();
+	try map.put("child", child);
 
 	{
-		try t.expectEqual(@as(i64, 9001), typed.mustGet(Map, "child").mustGet(i64, "power"));
-		try t.expectEqualStrings("goku", typed.mustGet(Map, "child").mustGet([]const u8, "name"));
+		try t.expectEqual(@as(i64, 9001), map.mustGet(Map, "child").mustGet(i64, "power"));
+		try t.expectEqualStrings("goku", map.mustGet(Map, "child").mustGet([]const u8, "name"));
 	}
 }
 
 test "array" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
 	var child = Array.init(t.allocator);
 	try child.append(.{.i32 = 32});
-	try typed.put("child", child);
+	try map.put("child", child);
 
 	{
-		const arr = typed.mustGet(Array, "child");
+		const arr = map.mustGet(Array, "child");
 		try t.expectEqual(@as(usize, 1), arr.items.len);
 		try t.expectEqual(@as(i32, 32), arr.items[0].mustGet(i32));
 	}
 }
 
-test "fromJson" {
+test "json" {
 	const json = std.json;
 
 	try t.expectEqual(Value{.null = {}}, try fromJson(undefined, null));
@@ -661,7 +713,6 @@ test "fromJson" {
 		try t.expectEqual(true, ta.items[0].mustGet(bool));
 		try t.expectEqual(@as(f64, 0.3211), ta.items[1].mustGet(Map).mustGet(f64, "k3"));
 
-
 		// load a map directly
 		var tm2 = try Map.fromJson(t.allocator, json_object1);
 
@@ -672,13 +723,18 @@ test "fromJson" {
 		var ta2 = tm2.mustGet(Array, "k2");
 		try t.expectEqual(true, ta2.items[0].mustGet(bool));
 		try t.expectEqual(@as(f64, 0.3211), ta2.items[1].mustGet(Map).mustGet(f64, "k3"));
+
+		const out = try std.json.stringifyAlloc(t.allocator, tm2, .{});
+		defer t.allocator.free(out);
+		try t.expectEqualStrings("{\"k2\":[true,{\"k3\":3.211e-01}],\"k1\":33}", out);
 	}
+
 }
 
 test "put Value" {
-	var typed = Map.init(t.allocator);
-	defer typed.deinit();
+	var map = Map.init(t.allocator);
+	defer map.deinit();
 
-	try typed.put("key", Value{.i64 = 331});
-	try t.expectEqual(@as(i64, 331), typed.get(i64, "key").?);
+	try map.put("key", Value{.i64 = 331});
+	try t.expectEqual(@as(i64, 331), map.get(i64, "key").?);
 }
