@@ -93,19 +93,19 @@ pub const Value = union(enum) {
 		switch (self) {
 			.null => return out.writeAll("null"),
 			.bool => |v| return out.writeAll(if (v) "true" else "false"),
-			.i8 => |v| return std.json.stringify(v, options, out),
-			.i16 => |v| return std.json.stringify(v, options, out),
-			.i32 => |v| return std.json.stringify(v, options, out),
-			.i64 => |v| return std.json.stringify(v, options, out),
-			.i128 => |v| return std.json.stringify(v, options, out),
-			.u8 => |v| return std.json.stringify(v, options, out),
-			.u16 => |v| return std.json.stringify(v, options, out),
-			.u32 => |v| return std.json.stringify(v, options, out),
-			.u64 => |v| return std.json.stringify(v, options, out),
-			.u128 => |v| return std.json.stringify(v, options, out),
-			.f32 => |v| return std.json.stringify(v, options, out),
-			.f64 => |v| return std.json.stringify(v, options, out),
-			.string => |v| return std.json.stringify(v, options, out),
+			.i8 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.i16 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.i32 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.i64 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.i128 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.u8 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.u16 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.u32 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.u64 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.u128 => |v| return std.fmt.formatIntValue(v, "", .{}, out),
+			.f32 => |v| return std.fmt.formatFloatDecimal(v, .{}, out),
+			.f64 => |v| return std.fmt.formatFloatDecimal(v, .{}, out),
+			.string => |v| return std.json.encodeJsonString(v, options, out),
 			.map => |v| return v.jsonStringify(options, out),
 			.array => |arr| {
 				try out.writeByte('[');
@@ -735,7 +735,7 @@ test "json" {
 
 		const out = try std.json.stringifyAlloc(t.allocator, tm2, .{});
 		defer t.allocator.free(out);
-		try t.expectEqualStrings("{\"k2\":[true,{\"k3\":3.211e-01}],\"k1\":33}", out);
+		try t.expectEqualStrings("{\"k2\":[true,{\"k3\":0.3211}],\"k1\":33}", out);
 	}
 }
 
