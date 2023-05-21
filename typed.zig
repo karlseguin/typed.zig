@@ -25,7 +25,7 @@ pub const Value = union(enum) {
 	map: Map,
 	array: Array,
 
-	fn deinit(self: Value) void {
+	pub fn deinit(self: Value) void {
 		switch (self) {
 			.array => |arr| {
 				for (arr.items) |child| {
@@ -122,7 +122,6 @@ pub const Value = union(enum) {
 			},
 		}
 	}
-
 };
 
 pub const Array = ArrayList(Value);
