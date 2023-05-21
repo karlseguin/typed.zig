@@ -117,6 +117,85 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
 	}
 }
 
+pub fn new(value: anytype) Value {
+	return newT(@TypeOf(value), value);
+}
+
+pub fn newT(comptime T: type, value: anytype) !Value {
+	switch (@typeInfo(T)) {
+		.Null => return .{.null = {}},
+		.Int => |int| {
+			if (int.signedness == .signed) {
+				switch (int.bits) {
+					1...8 => return .{.i8 = value},
+					9...16 => return .{.i16 = value},
+					17...32 => return .{.i32 = value},
+					33...64 => return .{.i64 = value},
+					65...128 => return .{.i128 = value},
+					else => return error.UnsupportedValueType,
+				}
+			} else {
+				switch (int.bits) {
+					1...8 => return .{.u8 = value},
+					9...16 => return .{.u16 = value},
+					17...32 => return .{.u32 = value},
+					33...64 => return .{.u64 = value},
+					65...128 => return .{.u128 = value},
+					else => return error.UnsupportedValueType,
+				}
+			}
+		},
+		.Float => |float| {
+			switch (float.bits) {
+				1...32 => return .{.f32 = value},
+				33...64 => return .{.f64 = value},
+				else => return error.UnsupportedValueType,
+			}
+		},
+		.Bool => return .{.bool = value},
+		.ComptimeInt => return .{.i64 = value},
+		.ComptimeFloat => return .{.f64 = value},
+		.Pointer => |ptr| {
+			switch (ptr.size) {
+				.One => return newT(ptr.child, value),
+				.Slice => switch (ptr.child) {
+					u8 => return .{.string = value.ptr},
+					else => return error.UnsupportedValueType,
+				},
+				else => return error.UnsupportedValueType,
+			}
+		},
+		.Array => |arr|  {
+			switch (arr.child) {
+				u8 => return .{.string = value},
+				else => return error.UnsupportedValueType,
+			}
+		},
+		.Struct => {
+			if (T == Map) {
+				return .{.map = value};
+			}
+			if (T == Array) {
+				return .{.array = value};
+			}
+			return error.UnsupportedValueType;
+		},
+		.Optional => |opt| {
+			if (value) |v| {
+				return newT(opt.child, v);
+			}
+			return .{.null = {}};
+		},
+		.Union => {
+			if (T == Value) {
+				return value;
+			}
+			return error.UnsupportedValueType;
+		},
+		else => return error.UnsupportedValueType,
+	}
+}
+
 // hack so that we can call:
 //    typed.get([]u"8, "somekey")
 // instead of the more verbose:
@@ -181,80 +260,7 @@ pub const Map = struct {
 	}
 
 	pub fn putT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
-		const typed_value = switch (@typeInfo(T)) {
-			.Null => .{.null = {}},
-			.Int => |int| blk: {
-				if (int.signedness == .signed) {
-					switch (int.bits) {
-						1...8 => break :blk .{.i8 = value},
-						9...16 => break :blk .{.i16 = value},
-						17...32 => break :blk .{.i32 = value},
-						33...64 => break :blk .{.i64 = value},
-						65...128 => break :blk .{.i128 = value},
-						else => return error.UnsupportedValueType,
-					}
-				} else {
-					switch (int.bits) {
-						1...8 => break :blk .{.u8 = value},
-						9...16 => break :blk .{.u16 = value},
-						17...32 => break :blk .{.u32 = value},
-						33...64 => break :blk .{.u64 = value},
-						65...128 => break :blk .{.u128 = value},
-						else => return error.UnsupportedValueType,
-					}
-				}
-			},
-			.Float => |float| blk: {
-				switch (float.bits) {
-					1...32 => break :blk .{.f32 = value},
-					33...64 => break :blk .{.f64 = value},
-					else => return error.UnsupportedValueType,
-				}
-			},
-			.Bool => .{.bool = value},
-			.ComptimeInt => .{.i64 = value},
-			.ComptimeFloat => .{.f64 = value},
-			.Pointer => |ptr| blk: {
-				switch (ptr.size) {
-					.One => return try self.putT(ptr.child, key, value),
-					.Slice => switch (ptr.child) {
-						u8 => break :blk .{.string = value.ptr},
-						else => return error.UnsupportedValueType,
-					},
-					else => return error.UnsupportedValueType,
-				}
-			},
-			.Array => |arr| blk: {
-				switch (arr.child) {
-					u8 => break :blk .{.string = value},
-					else => return error.UnsupportedValueType,
-				}
-			},
-			.Struct => blk: {
-				if (T == Map) {
-					break :blk .{.map = value};
-				}
-				if (T == Array) {
-					break :blk .{.array = value};
-				}
-				return error.UnsupportedValueType;
-			},
-			.Optional => |opt| blk: {
-				if (value) |v| {
-					return self.putT(opt.child, key, v);
-				}
-				break :blk .{.null = {}};
-			},
-			.Union => blk: {
-				if (T == Value) {
-					break :blk value;
-				} else {
-					return error.UnsupportedValueType;
-				}
-			},
-			else => return error.UnsupportedValueType,
-		};
-		return self.m.put(key, typed_value);
+		return self.m.put(key, try newT(T, value));
 	}
 
 	pub fn get(self: Map, comptime T: type, key: []const u8) optionalReturnType(T) {
