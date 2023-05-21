@@ -194,13 +194,13 @@ pub fn newT(comptime T: type, value: anytype) !Value {
 			switch (ptr.size) {
 				.One => return newT(ptr.child, value),
 				.Slice => switch (ptr.child) {
-					u8 => return .{.string = value.ptr},
+					u8 => return .{.string = value.ptr[0..value.len]},
 					else => return error.UnsupportedValueType,
 				},
 				else => return error.UnsupportedValueType,
 			}
 		},
-		.Array => |arr|  {
+		.Array => |arr| {
 			switch (arr.child) {
 				u8 => return .{.string = value},
 				else => return error.UnsupportedValueType,
@@ -584,6 +584,15 @@ test "string" {
 		try t.expectError(error.KeyNotFound, map.strictGet([]const u8, "other"));
 		try t.expectError(error.WrongType, map.strictGet([]const u8, "nope"));
 	}
+
+	{
+		//dynamic string
+		var flow = try t.allocator.alloc(u8, 4);
+		defer t.allocator.free(flow);
+		@memcpy(flow, "flow");
+		try map.put("spice", flow);
+		try t.expectEqualStrings("flow", map.mustGet([]const u8, "spice"));
+	}
 }
 
 test "null" {
@@ -728,7 +737,6 @@ test "json" {
 		defer t.allocator.free(out);
 		try t.expectEqualStrings("{\"k2\":[true,{\"k3\":3.211e-01}],\"k1\":33}", out);
 	}
-
 }
 
 test "put Value" {
