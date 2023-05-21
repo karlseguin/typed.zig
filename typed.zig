@@ -117,7 +117,7 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
 	}
 }
 
-pub fn new(value: anytype) Value {
+pub fn new(value: anytype) !Value {
 	return newT(@TypeOf(value), value);
 }
 
