@@ -6,6 +6,116 @@ const Allocator = std.mem.Allocator;
 
 const M = @This();
 
+pub const Date = struct {
+	year: i16,
+	month: u8,
+	day: u8,
+
+	const month_days = [_]u8{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+	pub fn init(year: i16, month: u8, day: u8) !Date {
+		if (month == 0 or month > 12) return error.InvalidDate;
+		if (day == 0) return error.InvalidDate;
+
+		const max_days = if (month == 2 and (@rem(year, 400) == 0 or (@rem(year, 100) != 0 and @rem(year, 4) == 0))) 29 else month_days[month - 1];
+		if (day > max_days) return error.InvalidDate;
+
+		return .{
+			.year = year,
+			.month = month,
+			.day = day,
+		};
+	}
+
+	pub fn parse(input: []const u8) !Date {
+		if (input.len < 8) return error.InvalidDate;
+
+		var negative = false;
+		var buf = input;
+		if (input[0] == '-') {
+			buf = input[1..];
+			negative = true;
+		}
+		var year = parseInt(i16, buf[0..4]) orelse return error.InvalidDate;
+		if (negative) {
+			year = -year;
+		}
+
+		// YYYY-MM-DD
+		if (buf.len == 10 and buf[4] == '-' and buf[7] == '-') {
+			const month = parseInt(u8, buf[5..7]) orelse return error.InvalidDate;
+			const day = parseInt(u8, buf[8..10]) orelse return error.InvalidDate;
+			return init(year, month, day);
+		}
+
+		// YYYYMMDD
+		const month = parseInt(u8, buf[4..6]) orelse return error.InvalidDate;
+		const day = parseInt(u8, buf[6..8]) orelse return error.InvalidDate;
+		return init(year, month, day);
+	}
+
+	pub fn order(a: Date, b: Date) std.math.Order {
+		const year_order = std.math.order(a.year, b.year);
+		if (year_order != .eq) return year_order;
+
+		const month_order = std.math.order(a.month, b.month);
+		if (month_order != .eq) return month_order;
+
+		return std.math.order(a.day, b.day);
+	}
+
+	pub fn format(self: Date, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+		var buf: [11]u8 = undefined;
+		const n = self.bufWrite(&buf);
+		try out.writeAll(buf[0..n]);
+	}
+
+	pub fn jsonStringify(self: Date, _: std.json.StringifyOptions, out: anytype) anyerror!void {
+		// Our goal here isn't to validate the date. It's to write what we have
+		// in a YYYY-MM-DD format. If the data in Date isn't valid, that's not
+		// our problem and we don't guarantee any reasonable output in such cases.
+
+		// std.fmt.formatInt is difficult to work with. The padding with signs
+		// doesn't work and it'll always put a + sign given a signed integer with padding
+		// So, for year, we always feed it an unsigned number (which avoids both issues)
+		// and prepend the - if we need it.s
+		var buf: [13]u8 = undefined;
+		const n = self.bufWrite(buf[1..12]);
+		buf[0] = '"';
+		buf[n+1] = '"';
+		try out.writeAll(buf[0..n+2]);
+	}
+
+	fn bufWrite(self: Date, into: []u8) u8 {
+		std.debug.assert(into.len == 11);
+		const year = self.year;
+		var buf: []u8 = undefined;
+		// cast this to a u16 so it doesn't insert a sign
+		// we don't want the + sign, ever
+		// and we don't even want it to insert the - sign, because it screws up
+		// the padding (we need to do it ourselfs)
+		if (year < 0) {
+			_ = std.fmt.formatIntBuf(into[1..], @intCast(u16, year * -1), 10, .lower, .{.width = 4, .fill = '0'});
+			into[0] = '-';
+			buf = into[5..];
+		} else {
+			_ = std.fmt.formatIntBuf(into, @intCast(u16, year), 10, .lower, .{.width = 4, .fill = '0'});
+			buf = into[4..];
+		}
+
+		buf[0] = '-';
+		paddingTwoDigits(buf[1..3], self.month);
+		buf[3] = '-';
+		paddingTwoDigits(buf[4..6], self.day);
+
+		if (year < 0) {
+			return 11;
+		}
+		// we didn't write the leading +
+		return 10;
+	}
+};
+
 pub const Time = struct {
 	hour: u8,
 	min: u8,
@@ -65,6 +175,45 @@ pub const Time = struct {
 
 		return std.math.order(a.micros, b.micros);
 	}
+
+	pub fn format(self: Time, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+		var buf: [15]u8 = undefined;
+		const n = self.bufWrite(&buf);
+		try out.writeAll(buf[0..n]);
+	}
+
+	pub fn jsonStringify(self: Time, _: std.json.StringifyOptions, out: anytype) anyerror!void {
+		// Our goal here isn't to validate the time. It's to write what we have
+		// in a hh:mm:ss.sss format. If the data in Time isn't valid, that's not
+		// our problem and we don't guarantee any reasonable output in such cases.
+		var buf: [17]u8 = undefined;
+		const n = self.bufWrite(buf[1..16]);
+		buf[0] = '"';
+		buf[n+1] = '"';
+		try out.writeAll(buf[0..n+2]);
+	}
+
+	fn bufWrite(self: Time, buf: []u8) u8 {
+		std.debug.assert(buf.len == 15);
+		paddingTwoDigits(buf[0..2], self.hour);
+		buf[2] = ':';
+		paddingTwoDigits(buf[3..5], self.min);
+		buf[5] = ':';
+		paddingTwoDigits(buf[6..8], self.sec);
+
+		const micros = self.micros;
+		if (micros == 0) {
+			return 8;
+		}
+		if (@rem(micros, 1000) == 0) {
+			buf[8] = '.';
+			_ = std.fmt.formatIntBuf(buf[9..12], micros / 1000, 10, .lower, .{.width = 3, .fill = '0'});
+			return 12;
+		}
+		buf[8] = '.';
+		_ = std.fmt.formatIntBuf(buf[9..15], micros, 10, .lower, .{.width = 6, .fill = '0'});
+		return 15;
+	}
 };
 
 pub const Timestamp = struct {
@@ -72,65 +221,6 @@ pub const Timestamp = struct {
 
 	pub fn order(a: Timestamp, b: Timestamp) std.math.Order {
 		return std.math.order(a.micros, b.micros);
-	}
-};
-
-pub const Date = struct {
-	year: i16,
-	month: u8,
-	day: u8,
-
-	const month_days = [_]u8{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-
-	pub fn init(year: i16, month: u8, day: u8) !Date {
-		if (month == 0 or month > 12) return error.InvalidDate;
-		if (day == 0) return error.InvalidDate;
-
-		const max_days = if (month == 2 and (@rem(year, 400) == 0 or (@rem(year, 100) != 0 and @rem(year, 4) == 0))) 29 else month_days[month - 1];
-		if (day > max_days) return error.InvalidDate;
-
-		return .{
-			.year = year,
-			.month = month,
-			.day = day,
-		};
-	}
-
-	pub fn parse(input: []const u8) !Date {
-		if (input.len < 8) return error.InvalidDate;
-
-		var negative = false;
-		var buf = input;
-		if (input[0] == '-') {
-			buf = input[1..];
-			negative = true;
-		}
-		var year = parseInt(i16, buf[0..4]) orelse return error.InvalidDate;
-		if (negative) {
-			year = -year;
-		}
-
-		// YYYY-MM-DD
-		if (buf.len == 10 and buf[4] == '-' and buf[7] == '-') {
-			const month = parseInt(u8, buf[5..7]) orelse return error.InvalidDate;
-			const day = parseInt(u8, buf[8..10]) orelse return error.InvalidDate;
-			return init(year, month, day);
-		}
-
-		// YYYYMMDD
-		const month = parseInt(u8, buf[4..6]) orelse return error.InvalidDate;
-		const day = parseInt(u8, buf[6..8]) orelse return error.InvalidDate;
-		return init(year, month, day);
-	}
-
-	pub fn order(a: Date, b: Date) std.math.Order {
-		const year_order = std.math.order(a.year, b.year);
-		if (year_order != .eq) return year_order;
-
-		const month_order = std.math.order(a.month, b.month);
-		if (month_order != .eq) return month_order;
-
-		return std.math.order(a.day, b.day);
 	}
 };
 
@@ -279,65 +369,8 @@ pub const Value = union(Type) {
 				try out.writeByte(']');
 			},
 			.timestamp => |v| return std.fmt.formatIntValue(v.micros, "", .{}, out),
-			.time => |v| {
-				// Our goal here isn't to validate the time. It's to write what we have
-				// in a hh:mm:ss.sss format. If the data in Time isn't valid, that's not
-				// our problem and we don't guarantee any reasonable output in such cases.
-				var buf: [17]u8 = undefined;
-				buf[0] = '"';
-				paddingTwoDigits(buf[1..3], v.hour);
-				buf[3] = ':';
-				paddingTwoDigits(buf[4..6], v.min);
-				buf[6] = ':';
-				paddingTwoDigits(buf[7..9], v.sec);
-
-				const micros = v.micros;
-				if (micros == 0) {
-					buf[9] = '"';
-					try out.writeAll(buf[0..10]);
-				} else if (@rem(micros, 1000) == 0) {
-					buf[9] = '.';
-					_ = std.fmt.formatIntBuf(buf[10..13], v.micros / 1000, 10, .lower, .{.width = 3, .fill = '0'});
-					buf[13] = '"';
-					try out.writeAll(buf[0..14]);
-				} else {
-					buf[9] = '.';
-					_ = std.fmt.formatIntBuf(buf[10..], v.micros, 10, .lower, .{.width = 6, .fill = '0'});
-					buf[16] = '"';
-					try out.writeAll(&buf);
-				}
-			},
-			.date => |v| {
-				// Our goal here isn't to validate the date. It's to write what we have
-				// in a YYYY-MM-DD format. If the data in Date isn't valid, that's not
-				// our problem and we don't guarantee any reasonable output in such cases.
-
-				// std.fmt.formatInt is difficult to work with. The padding with signs
-				// doesn't work and it'll always put a + sign given a signed integer with padding
-				// So, for year, we always feed it an unsigned number (which avoids both issues)
-				// and prepend the - if we need it.s
-
-				var buf: [13]u8 = undefined;
-				const year = v.year;
-				var uint_year = if (year < 0) @intCast(u16, year * -1) else @intCast(u16, year);
-				// start at 2, beceause we need to inject a " and/or -
-				_ = std.fmt.formatIntBuf(buf[2..], uint_year, 10, .lower, .{.width = 4, .fill = '0'});
-
-				buf[6] = '-';
-				paddingTwoDigits(buf[7..9], v.month);
-				buf[9] = '-';
-				paddingTwoDigits(buf[10..12], v.day);
-				buf[12] = '"';
-
-				if (year < 0) {
-					buf[0] = '"';
-					buf[1] = '-';
-					try out.writeAll(&buf);
-				} else {
-					buf[1] = '"';
-					try out.writeAll(buf[1..]);
-				}
-			}
+			.time => |v| return v.jsonStringify(options, out),
+			.date => |v| return v.jsonStringify(options, out),
 		}
 	}
 };
@@ -1084,6 +1117,20 @@ test "json: time" {
 	}
 }
 
+test "Date.format" {
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Date{.year = 2023, .month = 5, .day = 22}});
+		try t.expectEqualStrings("2023-05-22", out);
+	}
+
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Date{.year = -102, .month = 12, .day = 9}});
+		try t.expectEqualStrings("-0102-12-09", out);
+	}
+}
+
 test "Date.parse" {
 	{
 		//valid YYYY-MM-DD
@@ -1214,6 +1261,46 @@ test "Date.order" {
 			try t.expectEqual(std.math.Order.lt, b.order(a));
 		}
 	}
+}
+
+test "Time.format" {
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 23, .min = 59, .sec = 59, .micros = 0}});
+		try t.expectEqualStrings("23:59:59", out);
+	}
+
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 8, .min = 9, .sec = 10, .micros = 12}});
+		try t.expectEqualStrings("08:09:10.000012", out);
+	}
+
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 8, .min = 9, .sec = 10, .micros = 123}});
+		try t.expectEqualStrings("08:09:10.000123", out);
+	}
+
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 8, .min = 9, .sec = 10, .micros = 1234}});
+		try t.expectEqualStrings("08:09:10.001234", out);
+	}
+
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 8, .min = 9, .sec = 10, .micros = 12345}});
+		try t.expectEqualStrings("08:09:10.012345", out);
+	}
+
+	{
+		var buf: [20]u8 = undefined;
+		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 8, .min = 9, .sec = 10, .micros = 123456}});
+		try t.expectEqualStrings("08:09:10.123456", out);
+	}
+
+
 }
 
 test "Time.parse" {
