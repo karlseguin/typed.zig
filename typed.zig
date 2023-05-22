@@ -461,6 +461,15 @@ pub fn newT(comptime T: type, value: anytype) !Value {
 			if (T == Array) {
 				return .{.array = value};
 			}
+			if (T == Date) {
+				return .{.date = value};
+			}
+			if (T == Time) {
+				return .{.time = value};
+			}
+			if (T == Timestamp) {
+				return .{.timestamp = value};
+			}
 			return error.UnsupportedValueType;
 		},
 		.Optional => |opt| {
