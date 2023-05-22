@@ -25,6 +25,7 @@ pub const Time = struct {
 			.micros = micros,
 		};
 	}
+
 	fn parse(input: []const u8) !Time {
 		const len = input.len;
 		if (len < 8 or len > 15 or len == 9) return error.InvalidTime;
@@ -50,6 +51,19 @@ pub const Time = struct {
 			};
 		}
 		return init(hour, min, sec, micros);
+	}
+
+	fn order(a: Time, b: Time) std.math.Order {
+		const hour_order = std.math.order(a.hour, b.hour);
+		if (hour_order != .eq) return hour_order;
+
+		const min_order = std.math.order(a.min, b.min);
+		if (min_order != .eq) return min_order;
+
+		const sec_order = std.math.order(a.sec, b.sec);
+		if (sec_order != .eq) return sec_order;
+
+		return std.math.order(a.micros, b.micros);
 	}
 };
 
@@ -103,6 +117,16 @@ pub const Date = struct {
 		const month = parseInt(u8, buf[4..6]) orelse return error.InvalidDate;
 		const day = parseInt(u8, buf[6..8]) orelse return error.InvalidDate;
 		return init(year, month, day);
+	}
+
+	fn order(a: Date, b: Date) std.math.Order {
+		const year_order = std.math.order(a.year, b.year);
+		if (year_order != .eq) return year_order;
+
+		const month_order = std.math.order(a.month, b.month);
+		if (month_order != .eq) return month_order;
+
+		return std.math.order(a.day, b.day);
 	}
 };
 
@@ -1157,6 +1181,37 @@ test "Date.parse" {
 	}
 }
 
+test "Date.order" {
+	{
+		const a = Date{.year = 2023, .month = 5, .day = 22};
+		const b = Date{.year = 2023, .month = 5, .day = 22};
+		try t.expectEqual(std.math.Order.eq, a.order(b));
+	}
+
+	{
+		{
+			const a = Date{.year = 2023, .month = 5, .day = 22};
+			const b = Date{.year = 2022, .month = 5, .day = 22};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
+
+		{
+			const a = Date{.year = 2022, .month = 6, .day = 22};
+			const b = Date{.year = 2022, .month = 5, .day = 22};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
+
+		{
+			const a = Date{.year = 2023, .month = 5, .day = 23};
+			const b = Date{.year = 2022, .month = 5, .day = 22};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
+	}
+}
+
 test "Time.parse" {
 	{
 		//valid
@@ -1189,5 +1244,43 @@ test "Time.parse" {
 		try t.expectError(error.InvalidTime, Time.parse("00/00:00"));
 		try t.expectError(error.InvalidTime, Time.parse("00:00 00"));
 
+	}
+}
+
+test "Time.order" {
+	{
+		const a = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101002};
+		const b = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101002};
+		try t.expectEqual(std.math.Order.eq, a.order(b));
+	}
+
+	{
+		{
+			const a = Time{.hour = 20, .min = 17, .sec = 22, .micros = 101002};
+			const b = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101002};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
+
+		{
+			const a = Time{.hour = 19, .min = 18, .sec = 22, .micros = 101002};
+			const b = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101002};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
+
+		{
+			const a = Time{.hour = 19, .min = 17, .sec = 23, .micros = 101002};
+			const b = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101002};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
+
+		{
+			const a = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101003};
+			const b = Time{.hour = 19, .min = 17, .sec = 22, .micros = 101002};
+			try t.expectEqual(std.math.Order.gt, a.order(b));
+			try t.expectEqual(std.math.Order.lt, b.order(a));
+		}
 	}
 }
