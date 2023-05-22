@@ -12,7 +12,7 @@ pub const Time = struct {
 	sec: u8,
 	micros: u32 = 0,
 
-	fn init(hour: u8, min: u8, sec: u8, micros: u32) !Time {
+	pub fn init(hour: u8, min: u8, sec: u8, micros: u32) !Time {
 		if (hour > 23) return error.InvalidTime;
 		if (min > 59) return error.InvalidTime;
 		if (sec > 59) return error.InvalidTime;
@@ -26,7 +26,7 @@ pub const Time = struct {
 		};
 	}
 
-	fn parse(input: []const u8) !Time {
+	pub fn parse(input: []const u8) !Time {
 		const len = input.len;
 		if (len < 8 or len > 15 or len == 9) return error.InvalidTime;
 		if (input[2] != ':' or input[5] != ':') return error.InvalidTime;
@@ -53,7 +53,7 @@ pub const Time = struct {
 		return init(hour, min, sec, micros);
 	}
 
-	fn order(a: Time, b: Time) std.math.Order {
+	pub fn order(a: Time, b: Time) std.math.Order {
 		const hour_order = std.math.order(a.hour, b.hour);
 		if (hour_order != .eq) return hour_order;
 
@@ -69,6 +69,10 @@ pub const Time = struct {
 
 pub const Timestamp = struct {
 	micros: u64,
+
+	pub fn order(a: Timestamp, b: Timestamp) std.math.Order {
+		return std.math.order(a.micros, b.micros);
+	}
 };
 
 pub const Date = struct {
@@ -78,7 +82,7 @@ pub const Date = struct {
 
 	const month_days = [_]u8{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
-	fn init(year: i16, month: u8, day: u8) !Date {
+	pub fn init(year: i16, month: u8, day: u8) !Date {
 		if (month == 0 or month > 12) return error.InvalidDate;
 		if (day == 0) return error.InvalidDate;
 
@@ -92,7 +96,7 @@ pub const Date = struct {
 		};
 	}
 
-	fn parse(input: []const u8) !Date {
+	pub fn parse(input: []const u8) !Date {
 		if (input.len < 8) return error.InvalidDate;
 
 		var negative = false;
@@ -119,7 +123,7 @@ pub const Date = struct {
 		return init(year, month, day);
 	}
 
-	fn order(a: Date, b: Date) std.math.Order {
+	pub fn order(a: Date, b: Date) std.math.Order {
 		const year_order = std.math.order(a.year, b.year);
 		if (year_order != .eq) return year_order;
 
@@ -1282,5 +1286,20 @@ test "Time.order" {
 			try t.expectEqual(std.math.Order.gt, a.order(b));
 			try t.expectEqual(std.math.Order.lt, b.order(a));
 		}
+	}
+}
+
+test "Timestamp.order" {
+	{
+		const a = Timestamp{.micros = 1684746656160};
+		const b = Timestamp{.micros = 1684746656160};
+		try t.expectEqual(std.math.Order.eq, a.order(b));
+	}
+
+	{
+		const a = Timestamp{.micros = 1684746656161};
+		const b = Timestamp{.micros = 1684746656160};
+		try t.expectEqual(std.math.Order.gt, a.order(b));
+		try t.expectEqual(std.math.Order.lt, b.order(a));
 	}
 }
