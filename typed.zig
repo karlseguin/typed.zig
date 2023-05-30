@@ -551,6 +551,13 @@ pub const Map = struct {
 		return self.putT(@TypeOf(value), key, value);
 	}
 
+	pub fn putAll(self: *Map, values: anytype) !void {
+		const fields = std.meta.fields(@TypeOf(values));
+		inline for (fields) |field| {
+			try self.putT(field.type, field.name, @field(values, field.name));
+		}
+	}
+
 	pub fn putT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
 		return self.m.put(key, try newT(T, value));
 	}
@@ -1308,8 +1315,6 @@ test "Time.format" {
 		const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{.hour = 8, .min = 9, .sec = 10, .micros = 123456}});
 		try t.expectEqualStrings("08:09:10.123456", out);
 	}
-
-
 }
 
 test "Time.parse" {
@@ -1398,4 +1403,15 @@ test "Timestamp.order" {
 		try t.expectEqual(std.math.Order.gt, a.order(b));
 		try t.expectEqual(std.math.Order.lt, b.order(a));
 	}
+}
+
+test "putAll" {
+	var map = Map.init(t.allocator);
+	defer map.deinit();
+
+	try map.putAll(.{.over = 9000, .spice = "flow", .ok = true});
+	try t.expectEqual(true, map.get(bool, "ok").?);
+	try t.expectEqual(@as(i64, 9000), map.get(i64, "over").?);
+	try t.expectEqualStrings("flow", map.get([]u8, "spice").?);
+	try t.expectEqual(@as(usize, 3), map.m.count());
 }
