@@ -138,11 +138,17 @@ pub const Time = struct {
 
 	pub fn parse(input: []const u8) !Time {
 		const len = input.len;
-		if (len < 8 or len > 15 or len == 9) return error.InvalidTime;
-		if (input[2] != ':' or input[5] != ':') return error.InvalidTime;
+		if (len < 5 or input[2] != ':') return error.InvalidTime;
 
 		const hour = parseInt(u8, input[0..2]) orelse return error.InvalidTime;
 		const min = parseInt(u8, input[3..5]) orelse return error.InvalidTime;
+		if (len == 5) {
+			return init(hour, min, 0, 0);
+		}
+
+		if (len < 8 or len > 15 or len == 9) return error.InvalidTime;
+		if (input[5] != ':') return error.InvalidTime;
+
 		const sec = parseInt(u8, input[6..8]) orelse return error.InvalidTime;
 		var micros: u32 = 0;
 
@@ -1084,7 +1090,7 @@ test "json" {
 
 		const out = try std.json.stringifyAlloc(t.allocator, tm2, .{});
 		defer t.allocator.free(out);
-		try t.expectEqualStrings("{\"k2\":[true,{\"k3\":0.3211}],\"k1\":33}", out);
+		try t.expectEqualStrings("{\"k1\":33,\"k2\":[true,{\"k3\":0.3211}]}", out);
 	}
 }
 
@@ -1320,6 +1326,7 @@ test "Time.format" {
 test "Time.parse" {
 	{
 		//valid
+		try t.expectEqual(Time{.hour = 9, .min = 8, .sec = 0, .micros = 0}, try Time.parse("09:08"));
 		try t.expectEqual(Time{.hour = 9, .min = 8, .sec = 5, .micros = 123000}, try Time.parse("09:08:05.123"));
 		try t.expectEqual(Time{.hour = 23, .min = 59, .sec = 59, .micros = 0}, try Time.parse("23:59:59"));
 		try t.expectEqual(Time{.hour = 0, .min = 0, .sec = 0, .micros = 0}, try Time.parse("00:00:00"));
@@ -1334,6 +1341,7 @@ test "Time.parse" {
 
 	{
 		try t.expectError(error.InvalidTime, Time.parse(""));
+		try t.expectError(error.InvalidTime, Time.parse("01:00:"));
 		try t.expectError(error.InvalidTime, Time.parse("1:00:00"));
 		try t.expectError(error.InvalidTime, Time.parse("10:1:00"));
 		try t.expectError(error.InvalidTime, Time.parse("10:11:4"));
