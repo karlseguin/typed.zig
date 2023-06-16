@@ -553,19 +553,37 @@ pub const Map = struct {
 		return init(undefined);
 	}
 
+	pub fn ensureTotalCapacity(self: *Map, size: u32) !void {
+		return self.m.ensureTotalCapacity(size);
+	}
+
+	pub fn ensureUnusedCapacity(self: *Map, size: u32) !void {
+		return self.m.ensureUnusedCapacity(size);
+	}
+
 	pub fn put(self: *Map, key: []const u8, value: anytype) !void {
 		return self.putT(@TypeOf(value), key, value);
 	}
 
 	pub fn putAll(self: *Map, values: anytype) !void {
 		const fields = std.meta.fields(@TypeOf(values));
+		try self.m.ensureUnusedCapacity(fields.len);
+
 		inline for (fields) |field| {
-			try self.putT(field.type, field.name, @field(values, field.name));
+			self.putAssumeCapacityT(field.type, field.name, @field(values, field.name));
 		}
 	}
 
 	pub fn putT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
 		return self.m.put(key, try newT(T, value));
+	}
+
+	pub fn putAssumeCapacity(self: *Map, key: []const u8, value: anytype) void {
+		self.putAssumeCapacityT(@TypeOf(value), key, value);
+	}
+
+	pub fn putAssumeCapacityT(self: *Map, comptime T: type, key: []const u8, value: anytype) void {
+		self.m.putAssumeCapacity(key, try newT(T, value));
 	}
 
 	pub fn get(self: Map, comptime T: type, key: []const u8) optionalReturnType(T) {
@@ -1422,4 +1440,19 @@ test "putAll" {
 	try t.expectEqual(@as(i64, 9000), map.get(i64, "over").?);
 	try t.expectEqualStrings("flow", map.get([]u8, "spice").?);
 	try t.expectEqual(@as(usize, 3), map.m.count());
+}
+
+
+test "putAssumeCapacity" {
+	var map = Map.init(t.allocator);
+	defer map.deinit();
+
+	try map.ensureTotalCapacity(3);
+
+	map.putAssumeCapacity("a", 1);
+	map.putAssumeCapacity("b", true);
+	map.putAssumeCapacity("c", "hello");
+	try t.expectEqual(@as(i64, 1), map.get(i64, "a").?);
+	try t.expectEqual(true, map.get(bool, "b").?);
+	try t.expectEqualStrings("hello", map.get([]u8, "c").?);
 }
