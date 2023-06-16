@@ -223,7 +223,7 @@ pub const Time = struct {
 };
 
 pub const Timestamp = struct {
-	micros: u64,
+	micros: i64,
 
 	pub fn order(a: Timestamp, b: Timestamp) std.math.Order {
 		return std.math.order(a.micros, b.micros);
