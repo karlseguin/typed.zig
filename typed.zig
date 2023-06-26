@@ -379,6 +379,19 @@ pub const Value = union(Type) {
 			.date => |v| return v.jsonStringify(options, out),
 		}
 	}
+
+	pub fn format(self: Value, out: anytype) !void {
+		switch (self) {
+			.string => |v| return out.writeAll(v),
+			inline else => |v| {
+				if (comptime std.meta.trait.hasFn("format")(@TypeOf(v))) {
+					return v.format("{any}", .{}, out);
+				} else {
+					return self.jsonStringify(.{}, out);
+				}
+			}
+		}
+	}
 };
 
 // gets a typed.Value from a std.json.Value
@@ -1462,7 +1475,7 @@ test "putAssumeCapacity" {
 	try t.expectEqualStrings("hello", map.get([]u8, "c").?);
 }
 
-test "new: basic" {
+test "new" {
 	try t.expectEqual(true, (try new(undefined, true)).bool);
 	try t.expectEqual(@as(i64, 33), (try new(undefined, 33)).i64);
 	try t.expectEqual(@as(i32, -88811123), (try new(undefined, @as(i32, -88811123))).i32);
@@ -1491,5 +1504,59 @@ test "new: basic" {
 		try t.expectEqual(@as(i32, -32), l.items[0].i32);
 		try t.expectEqual(@as(i32, 38181354), l.items[1].i32);
 		try t.expectEqual(@as(i32, -984), l.items[2].i32);
+	}
+}
+
+test "format" {
+	var buf = std.ArrayList(u8).init(t.allocator);
+	defer buf.deinit();
+
+	{
+		try (try new(undefined, @as(i8, -32))).format(buf.writer());
+		try t.expectEqualStrings("-32", buf.items);
+	}
+
+	{
+		buf.clearRetainingCapacity();
+		try (try new(undefined, null)).format(buf.writer());
+		try t.expectEqualStrings("null", buf.items);
+	}
+
+	{
+		buf.clearRetainingCapacity();
+		try (try new(undefined, "Hello World")).format(buf.writer());
+		try t.expectEqualStrings("Hello World", buf.items);
+	}
+
+	{
+		buf.clearRetainingCapacity();
+		var value = try new(t.allocator, [_]f64{1.1, 2.2, -3.3});
+		defer value.deinit();
+		try value.format(buf.writer());
+		try t.expectEqualStrings("[1.1,2.2,-3.3]", buf.items);
+	}
+
+	{
+		buf.clearRetainingCapacity();
+		var value = try new(t.allocator, .{.over = 9000});
+		defer value.deinit();
+		try value.format(buf.writer());
+		try t.expectEqualStrings("{\"over\":9000}", buf.items);
+	}
+
+	{
+		buf.clearRetainingCapacity();
+		var value = try new(t.allocator, try Time.parse("18:12:33"));
+		defer value.deinit();
+		try value.format(buf.writer());
+		try t.expectEqualStrings("18:12:33", buf.items);
+	}
+
+	{
+		buf.clearRetainingCapacity();
+		var value = try new(t.allocator, try Date.parse("2023-06-26"));
+		defer value.deinit();
+		try value.format(buf.writer());
+		try t.expectEqualStrings("2023-06-26", buf.items);
 	}
 }
