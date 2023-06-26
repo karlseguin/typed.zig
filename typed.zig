@@ -380,14 +380,14 @@ pub const Value = union(Type) {
 		}
 	}
 
-	pub fn format(self: Value, out: anytype) !void {
+	pub fn stringify(self: Value, writer: anytype) !void {
 		switch (self) {
-			.string => |v| return out.writeAll(v),
+			.string => |v| return writer.writeAll(v),
 			inline else => |v| {
 				if (comptime std.meta.trait.hasFn("format")(@TypeOf(v))) {
-					return v.format("{any}", .{}, out);
+					return v.format("", .{}, writer);
 				} else {
-					return self.jsonStringify(.{}, out);
+					return self.jsonStringify(.{}, writer);
 				}
 			}
 		}
@@ -603,6 +603,10 @@ pub const Map = struct {
 
 	pub fn putAssumeCapacityT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
 		self.m.putAssumeCapacity(key, try newT(self.m.allocator, T, value));
+	}
+
+	pub fn getValue(self: Map, key: []const u8) ?Value {
+		return self.m.get(key);
 	}
 
 	pub fn get(self: Map, comptime T: type, key: []const u8) optionalReturnType(T) {
@@ -1507,24 +1511,24 @@ test "new" {
 	}
 }
 
-test "format" {
+test "stringify" {
 	var buf = std.ArrayList(u8).init(t.allocator);
 	defer buf.deinit();
 
 	{
-		try (try new(undefined, @as(i8, -32))).format(buf.writer());
+		try (try new(undefined, @as(i8, -32))).stringify(buf.writer());
 		try t.expectEqualStrings("-32", buf.items);
 	}
 
 	{
 		buf.clearRetainingCapacity();
-		try (try new(undefined, null)).format(buf.writer());
+		try (try new(undefined, null)).stringify(buf.writer());
 		try t.expectEqualStrings("null", buf.items);
 	}
 
 	{
 		buf.clearRetainingCapacity();
-		try (try new(undefined, "Hello World")).format(buf.writer());
+		try (try new(undefined, "Hello World")).stringify(buf.writer());
 		try t.expectEqualStrings("Hello World", buf.items);
 	}
 
@@ -1532,7 +1536,7 @@ test "format" {
 		buf.clearRetainingCapacity();
 		var value = try new(t.allocator, [_]f64{1.1, 2.2, -3.3});
 		defer value.deinit();
-		try value.format(buf.writer());
+		try value.stringify(buf.writer());
 		try t.expectEqualStrings("[1.1,2.2,-3.3]", buf.items);
 	}
 
@@ -1540,7 +1544,7 @@ test "format" {
 		buf.clearRetainingCapacity();
 		var value = try new(t.allocator, .{.over = 9000});
 		defer value.deinit();
-		try value.format(buf.writer());
+		try value.stringify(buf.writer());
 		try t.expectEqualStrings("{\"over\":9000}", buf.items);
 	}
 
@@ -1548,7 +1552,7 @@ test "format" {
 		buf.clearRetainingCapacity();
 		var value = try new(t.allocator, try Time.parse("18:12:33"));
 		defer value.deinit();
-		try value.format(buf.writer());
+		try value.stringify(buf.writer());
 		try t.expectEqualStrings("18:12:33", buf.items);
 	}
 
@@ -1556,7 +1560,17 @@ test "format" {
 		buf.clearRetainingCapacity();
 		var value = try new(t.allocator, try Date.parse("2023-06-26"));
 		defer value.deinit();
-		try value.format(buf.writer());
+		try value.stringify(buf.writer());
 		try t.expectEqualStrings("2023-06-26", buf.items);
 	}
+}
+
+test "getValue" {
+	var m = Map.init(t.allocator);
+	defer m.deinit();
+
+	try m.putAll(.{.age = 50, .name = "Ghanima"});
+	try t.expectEqual(@as(?Value, null), m.getValue("nope"));
+	try t.expectEqual(@as(i64, 50), m.getValue("age").?.i64);
+	try t.expectEqualStrings("Ghanima", m.getValue("name").?.string);
 }
