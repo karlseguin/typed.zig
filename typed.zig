@@ -406,11 +406,11 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
 	}
 }
 
-pub fn new(value: anytype) !Value {
-	return newT(@TypeOf(value), value);
+pub fn new(allocator: Allocator, value: anytype) !Value {
+	return newT(allocator, @TypeOf(value), value);
 }
 
-pub fn newT(comptime T: type, value: anytype) !Value {
+pub fn newT(allocator: Allocator, comptime T: type, value: anytype) !Value {
 	switch (@typeInfo(T)) {
 		.Null => return .{.null = {}},
 		.Int => |int| {
@@ -444,43 +444,49 @@ pub fn newT(comptime T: type, value: anytype) !Value {
 		.Bool => return .{.bool = value},
 		.ComptimeInt => return .{.i64 = value},
 		.ComptimeFloat => return .{.f64 = value},
-		.Pointer => |ptr| {
-			switch (ptr.size) {
-				.One => return newT(ptr.child, value),
-				.Slice => switch (ptr.child) {
-					u8 => return .{.string = value.ptr[0..value.len]},
-					else => return error.UnsupportedValueType,
+		.Pointer => |ptr| switch (ptr.size) {
+			.One => switch (@typeInfo(ptr.child)) {
+				.Array => {
+					const Slice = []const std.meta.Elem(ptr.child);
+					return newT(allocator, Slice, @as(Slice, value));
 				},
-				else => return error.UnsupportedValueType,
+				else => return newT(allocator, @TypeOf(value.*), value.*),
 			}
+			.Many, .Slice => {
+				if (ptr.size == .Many and ptr.sentinel == null) {
+					return error.UnsupportedValueTypeA;
+				}
+				const slice = if (ptr.size == .Many) std.mem.span(value) else value;
+				const child = ptr.child;
+				if (child == u8) return .{.string = slice};
+
+				var arr = Array.init(allocator);
+				try arr.ensureTotalCapacity(slice.len);
+				for (slice) |v| {
+					arr.appendAssumeCapacity(try newT(allocator, child, v));
+				}
+				return .{.array = arr};
+			},
+			else => return error.UnsupportedValueTypeC,
 		},
-		.Array => |arr| {
-			switch (arr.child) {
-				u8 => return .{.string = value},
-				else => return error.UnsupportedValueType,
+		.Array => return newT(allocator, @TypeOf(&value), &value),
+		.Struct => |s| {
+			if (T == Map) return .{.map = value};
+			if (T == Array) return .{.array = value};
+			if (T == Date) return .{.date = value};
+			if (T == Time) return .{.time = value};
+			if (T == Timestamp) return .{.timestamp = value};
+
+			var m = Map.init(allocator);
+			try m.ensureTotalCapacity(s.fields.len);
+			inline for (s.fields) |field| {
+				try m.putAssumeCapacity(field.name, @field(value, field.name));
 			}
-		},
-		.Struct => {
-			if (T == Map) {
-				return .{.map = value};
-			}
-			if (T == Array) {
-				return .{.array = value};
-			}
-			if (T == Date) {
-				return .{.date = value};
-			}
-			if (T == Time) {
-				return .{.time = value};
-			}
-			if (T == Timestamp) {
-				return .{.timestamp = value};
-			}
-			return error.UnsupportedValueType;
+			return .{.map = m};
 		},
 		.Optional => |opt| {
 			if (value) |v| {
-				return newT(opt.child, v);
+				return newT(allocator, opt.child, v);
 			}
 			return .{.null = {}};
 		},
@@ -537,15 +543,15 @@ pub const Map = struct {
 	}
 
 	pub fn fromJson(allocator: Allocator, obj: std.json.ObjectMap) !Map {
-			var to = init(allocator);
-			var map = &to.m;
-			try map.ensureTotalCapacity(@intCast(u32, obj.count()));
+		var to = init(allocator);
+		var map = &to.m;
+		try map.ensureTotalCapacity(@intCast(u32, obj.count()));
 
-			var it = obj.iterator();
-			while (it.next()) |entry| {
-				map.putAssumeCapacity(entry.key_ptr.*, try M.fromJson(allocator, entry.value_ptr.*));
-			}
-			return to;
+		var it = obj.iterator();
+		while (it.next()) |entry| {
+			map.putAssumeCapacity(entry.key_ptr.*, try M.fromJson(allocator, entry.value_ptr.*));
+		}
+		return to;
 	}
 
 	// dangerous!
@@ -570,20 +576,20 @@ pub const Map = struct {
 		try self.m.ensureUnusedCapacity(fields.len);
 
 		inline for (fields) |field| {
-			self.putAssumeCapacityT(field.type, field.name, @field(values, field.name));
+			try self.putAssumeCapacityT(field.type, field.name, @field(values, field.name));
 		}
 	}
 
 	pub fn putT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
-		return self.m.put(key, try newT(T, value));
+		return self.m.put(key, try newT(self.m.allocator, T, value));
 	}
 
-	pub fn putAssumeCapacity(self: *Map, key: []const u8, value: anytype) void {
-		self.putAssumeCapacityT(@TypeOf(value), key, value);
+	pub fn putAssumeCapacity(self: *Map, key: []const u8, value: anytype) !void {
+		return self.putAssumeCapacityT(@TypeOf(value), key, value);
 	}
 
-	pub fn putAssumeCapacityT(self: *Map, comptime T: type, key: []const u8, value: anytype) void {
-		self.m.putAssumeCapacity(key, try newT(T, value));
+	pub fn putAssumeCapacityT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
+		self.m.putAssumeCapacity(key, try newT(self.m.allocator, T, value));
 	}
 
 	pub fn get(self: Map, comptime T: type, key: []const u8) optionalReturnType(T) {
@@ -1442,17 +1448,48 @@ test "putAll" {
 	try t.expectEqual(@as(usize, 3), map.m.count());
 }
 
-
 test "putAssumeCapacity" {
 	var map = Map.init(t.allocator);
 	defer map.deinit();
 
 	try map.ensureTotalCapacity(3);
 
-	map.putAssumeCapacity("a", 1);
-	map.putAssumeCapacity("b", true);
-	map.putAssumeCapacity("c", "hello");
+	try map.putAssumeCapacity("a", 1);
+	try map.putAssumeCapacity("b", true);
+	try map.putAssumeCapacity("c", "hello");
 	try t.expectEqual(@as(i64, 1), map.get(i64, "a").?);
 	try t.expectEqual(true, map.get(bool, "b").?);
 	try t.expectEqualStrings("hello", map.get([]u8, "c").?);
+}
+
+test "new: basic" {
+	try t.expectEqual(true, (try new(undefined, true)).bool);
+	try t.expectEqual(@as(i64, 33), (try new(undefined, 33)).i64);
+	try t.expectEqual(@as(i32, -88811123), (try new(undefined, @as(i32, -88811123))).i32);
+	try t.expectEqualStrings("over 9000", (try new(undefined, "over 9000")).string);
+
+	{
+		var list = std.ArrayList(u8).init(t.allocator);
+		defer list.deinit();
+		try list.appendSlice("i love keemun");
+		try t.expectEqualStrings("i love keemun", (try new(undefined, list.items)).string);
+	}
+
+	{
+		var m = (try new(t.allocator, .{.name = "Leto", .location = .{.birth = "Caladan", .present = "Arrakis"}, .age = 3000})).map;
+		defer m.deinit();
+		try t.expectEqual(@as(i64, 3000), m.get(i64, "age").?);
+		try t.expectEqualStrings("Caladan", m.get(Map, "location").?.get([]u8, "birth").?);
+		try t.expectEqualStrings("Arrakis", m.get(Map, "location").?.get([]u8, "present").?);
+		try t.expectEqualStrings("Leto", m.get([]u8, "name").?);
+	}
+
+	{
+		var l = (try new(t.allocator, [3]i32{-32, 38181354, -984})).array;
+		defer l.deinit();
+		try t.expectEqual(@as(usize, 3), l.items.len);
+		try t.expectEqual(@as(i32, -32), l.items[0].i32);
+		try t.expectEqual(@as(i32, 38181354), l.items[1].i32);
+		try t.expectEqual(@as(i32, -984), l.items[2].i32);
+	}
 }
