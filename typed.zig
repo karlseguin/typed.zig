@@ -95,11 +95,11 @@ pub const Date = struct {
 		// and we don't even want it to insert the - sign, because it screws up
 		// the padding (we need to do it ourselfs)
 		if (year < 0) {
-			_ = std.fmt.formatIntBuf(into[1..], @intCast(u16, year * -1), 10, .lower, .{.width = 4, .fill = '0'});
+			_ = std.fmt.formatIntBuf(into[1..], @as(u16, @intCast(year * -1)), 10, .lower, .{.width = 4, .fill = '0'});
 			into[0] = '-';
 			buf = into[5..];
 		} else {
-			_ = std.fmt.formatIntBuf(into, @intCast(u16, year), 10, .lower, .{.width = 4, .fill = '0'});
+			_ = std.fmt.formatIntBuf(into, @as(u16, @intCast(year)), 10, .lower, .{.width = 4, .fill = '0'});
 			buf = into[4..];
 		}
 
@@ -558,7 +558,7 @@ pub const Map = struct {
 	pub fn fromJson(allocator: Allocator, obj: std.json.ObjectMap) !Map {
 		var to = init(allocator);
 		var map = &to.m;
-		try map.ensureTotalCapacity(@intCast(u32, obj.count()));
+		try map.ensureTotalCapacity(@intCast(obj.count()));
 
 		var it = obj.iterator();
 		while (it.next()) |entry| {
