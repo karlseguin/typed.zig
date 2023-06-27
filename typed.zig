@@ -420,10 +420,10 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
 }
 
 pub fn new(allocator: Allocator, value: anytype) !Value {
-	return newT(allocator, @TypeOf(value), value);
+	return newT(@TypeOf(value), allocator, value);
 }
 
-pub fn newT(allocator: Allocator, comptime T: type, value: anytype) !Value {
+pub fn newT(comptime T: type, allocator: Allocator, value: anytype) !Value {
 	switch (@typeInfo(T)) {
 		.Null => return .{.null = {}},
 		.Int => |int| {
@@ -461,9 +461,9 @@ pub fn newT(allocator: Allocator, comptime T: type, value: anytype) !Value {
 			.One => switch (@typeInfo(ptr.child)) {
 				.Array => {
 					const Slice = []const std.meta.Elem(ptr.child);
-					return newT(allocator, Slice, @as(Slice, value));
+					return newT(Slice, allocator, @as(Slice, value));
 				},
-				else => return newT(allocator, @TypeOf(value.*), value.*),
+				else => return newT(@TypeOf(value.*), allocator, value.*),
 			}
 			.Many, .Slice => {
 				if (ptr.size == .Many and ptr.sentinel == null) {
@@ -476,13 +476,13 @@ pub fn newT(allocator: Allocator, comptime T: type, value: anytype) !Value {
 				var arr = Array.init(allocator);
 				try arr.ensureTotalCapacity(slice.len);
 				for (slice) |v| {
-					arr.appendAssumeCapacity(try newT(allocator, child, v));
+					arr.appendAssumeCapacity(try newT(child, allocator, v));
 				}
 				return .{.array = arr};
 			},
 			else => return error.UnsupportedValueTypeC,
 		},
-		.Array => return newT(allocator, @TypeOf(&value), &value),
+		.Array => return newT(@TypeOf(&value), allocator, &value),
 		.Struct => |s| {
 			if (T == Map) return .{.map = value};
 			if (T == Array) return .{.array = value};
@@ -499,7 +499,7 @@ pub fn newT(allocator: Allocator, comptime T: type, value: anytype) !Value {
 		},
 		.Optional => |opt| {
 			if (value) |v| {
-				return newT(allocator, opt.child, v);
+				return newT(opt.child, allocator, v);
 			}
 			return .{.null = {}};
 		},
@@ -594,7 +594,7 @@ pub const Map = struct {
 	}
 
 	pub fn putT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
-		return self.m.put(key, try newT(self.m.allocator, T, value));
+		return self.m.put(key, try newT(T, self.m.allocator, value));
 	}
 
 	pub fn putAssumeCapacity(self: *Map, key: []const u8, value: anytype) !void {
@@ -602,7 +602,7 @@ pub const Map = struct {
 	}
 
 	pub fn putAssumeCapacityT(self: *Map, comptime T: type, key: []const u8, value: anytype) !void {
-		self.m.putAssumeCapacity(key, try newT(self.m.allocator, T, value));
+		self.m.putAssumeCapacity(key, try newT(T, self.m.allocator, value));
 	}
 
 	pub fn getValue(self: Map, key: []const u8) ?Value {
