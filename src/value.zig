@@ -98,7 +98,7 @@ pub const Value = union(Type) {
 		};
 	}
 
-	pub fn jsonStringify(self: Value, options: std.json.StringifyOptions, out: anytype) anyerror!void {
+	pub fn jsonStringify(self: Value, options: std.json.StringifyOptions, out: anytype) @TypeOf(out).Error!void {
 		switch (self) {
 			.null => return out.writeAll("null"),
 			.bool => |v| return out.writeAll(if (v) "true" else "false"),

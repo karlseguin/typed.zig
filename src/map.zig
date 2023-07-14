@@ -110,7 +110,7 @@ pub const Map = struct {
 		return true;
 	}
 
-	pub fn jsonStringify(self: Map, options: std.json.StringifyOptions, out: anytype) !void {
+	pub fn jsonStringify(self: Map, options: std.json.StringifyOptions, out: anytype) @TypeOf(out).Error!void {
 		try out.writeByte('{');
 		var first = true;
 		var it = self.m.iterator();
