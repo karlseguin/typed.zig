@@ -153,10 +153,12 @@ pub const Value = union(Type) {
 				try out.writePreformatted(buf[0..n]);
 			},
 			.f32 => |v| {
+				// https://github.com/ziglang/zig/issues/16519
 				try out.writePreformatted("");
 				try std.fmt.formatFloatDecimal(v, .{}, out.stream);
 			},
 			.f64 => |v| {
+				// https://github.com/ziglang/zig/issues/16519
 				try out.writePreformatted("");
 				try std.fmt.formatFloatDecimal(v, .{}, out.stream);
 			},
