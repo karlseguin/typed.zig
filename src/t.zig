@@ -6,7 +6,7 @@ pub const allocator = std.testing.allocator;
 // when expected is frequently a comptime.
 // https://github.com/ziglang/zig/issues/4437
 pub fn expectEqual(expected: anytype, actual: anytype) !void {
-  try std.testing.expectEqual(@as(@TypeOf(actual), expected), actual);
+	try std.testing.expectEqual(@as(@TypeOf(actual), expected), actual);
 }
 pub const expectError = std.testing.expectError;
 pub const expectString = std.testing.expectEqualStrings;

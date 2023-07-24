@@ -98,52 +98,85 @@ pub const Value = union(Type) {
 		};
 	}
 
-	pub fn jsonStringify(self: Value, options: std.json.StringifyOptions, out: anytype) @TypeOf(out).Error!void {
+	pub fn jsonStringify(self: Value, out: anytype) !void {
 		switch (self) {
-			.null => return out.writeAll("null"),
-			.bool => |v| return out.writeAll(if (v) "true" else "false"),
-			.i8 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.i16 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.i32 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.i64 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.i128 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.u8 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.u16 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.u32 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.u64 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.u128 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, out),
-			.f32 => |v| return std.fmt.formatFloatDecimal(v, .{}, out),
-			.f64 => |v| return std.fmt.formatFloatDecimal(v, .{}, out),
-			.string => |v| return std.json.encodeJsonString(v, options, out),
-			.map => |v| return v.jsonStringify(options, out),
+			.null => return out.writePreformatted("null"),
+			.bool => |v| return out.writePreformatted(if (v) "true" else "false"),
+			.i8 => |v| {
+				var buf: [4]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.i16 => |v| {
+				var buf: [6]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.i32 => |v| {
+				var buf: [11]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.i64 => |v| {
+				var buf: [20]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.i128 => |v| {
+				var buf: [40]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.u8 => |v| {
+				var buf: [3]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.u16 => |v| {
+				var buf: [5]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.u32 => |v| {
+				var buf: [10]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.u64 => |v| {
+				var buf: [19]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.u128 => |v| {
+				var buf: [39]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
+			.f32 => |v| {
+				try out.writePreformatted("");
+				try std.fmt.formatFloatDecimal(v, .{}, out.stream);
+			},
+			.f64 => |v| {
+				try out.writePreformatted("");
+				try std.fmt.formatFloatDecimal(v, .{}, out.stream);
+			},
+			.timestamp => |v| {
+				var buf: [20]u8 = undefined;
+				const n = std.fmt.formatIntBuf(&buf, v.micros, 10, .lower, .{});
+				try out.writePreformatted(buf[0..n]);
+			},
 			.array => |arr| {
-				try out.writeByte('[');
+				try out.beginArray();
 				const items = arr.items;
 				if (items.len > 0) {
-					try items[0].jsonStringify(options, out);
+					try out.write(items[0]);
 					for (items[1..]) |v| {
-						try out.writeByte(',');
-						try v.jsonStringify(options, out);
+						try out.write(v);
 					}
 				}
-				try out.writeByte(']');
+				try out.endArray();
 			},
-			.timestamp => |v| return std.fmt.formatIntValue(v.micros, "", .{}, out),
-			.time => |v| return v.jsonStringify(options, out),
-			.date => |v| return v.jsonStringify(options, out),
-		}
-	}
-
-	pub fn write(self: Value, writer: anytype) !void {
-		switch (self) {
-			.string => |v| return writer.writeAll(v),
-			inline else => |v| {
-				if (comptime std.meta.trait.hasFn("format")(@TypeOf(v))) {
-					return v.format("", .{}, writer);
-				} else {
-					return self.jsonStringify(.{}, writer);
-				}
-			}
+			inline else => |v| return out.write(v),
 		}
 	}
 
@@ -253,62 +286,6 @@ pub const Value = union(Type) {
 };
 
 const t = @import("t.zig");
-test "value: write" {
-	const new = typed.new;
-
-	var buf = std.ArrayList(u8).init(t.allocator);
-	defer buf.deinit();
-
-	{
-		try (try new(undefined, @as(i8, -32))).write(buf.writer());
-		try t.expectString("-32", buf.items);
-	}
-
-	{
-		buf.clearRetainingCapacity();
-		try (try new(undefined, null)).write(buf.writer());
-		try t.expectString("null", buf.items);
-	}
-
-	{
-		buf.clearRetainingCapacity();
-		try (try new(undefined, "Hello World")).write(buf.writer());
-		try t.expectString("Hello World", buf.items);
-	}
-
-	{
-		buf.clearRetainingCapacity();
-		var value = try new(t.allocator, [_]f64{1.1, 2.2, -3.3});
-		defer value.deinit();
-		try value.write(buf.writer());
-		try t.expectString("[1.1,2.2,-3.3]", buf.items);
-	}
-
-	{
-		buf.clearRetainingCapacity();
-		var value = try new(t.allocator, .{.over = 9000});
-		defer value.deinit();
-		try value.write(buf.writer());
-		try t.expectString("{\"over\":9000}", buf.items);
-	}
-
-	{
-		buf.clearRetainingCapacity();
-		var value = try new(t.allocator, try Time.parse("18:12:33"));
-		defer value.deinit();
-		try value.write(buf.writer());
-		try t.expectString("18:12:33", buf.items);
-	}
-
-	{
-		buf.clearRetainingCapacity();
-		var value = try new(t.allocator, try Date.parse("2023-06-26"));
-		defer value.deinit();
-		try value.write(buf.writer());
-		try t.expectString("2023-06-26", buf.items);
-	}
-}
-
 test "value: toString" {
 	{
 		var str = try (Value{.i8 = -32}).toString(t.allocator, .{});
@@ -364,28 +341,4 @@ test "value: toString" {
 		defer value.deinit();
 		try t.expectError(error.NotAString, value.toString(undefined, .{}));
 	}
-
-	// {
-	// 	buf.clearRetainingCapacity();
-	// 	var value = try new(t.allocator, .{.over = 9000});
-	// 	defer value.deinit();
-	// 	try value.write(buf.writer());
-	// 	try t.expectString("{\"over\":9000}", buf.items);
-	// }
-
-	// {
-	// 	buf.clearRetainingCapacity();
-	// 	var value = try new(t.allocator, try Time.parse("18:12:33"));
-	// 	defer value.deinit();
-	// 	try value.write(buf.writer());
-	// 	try t.expectString("18:12:33", buf.items);
-	// }
-
-	// {
-	// 	buf.clearRetainingCapacity();
-	// 	var value = try new(t.allocator, try Date.parse("2023-06-26"));
-	// 	defer value.deinit();
-	// 	try value.write(buf.writer());
-	// 	try t.expectString("2023-06-26", buf.items);
-	// }
 }

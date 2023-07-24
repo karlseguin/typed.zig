@@ -35,7 +35,6 @@ pub const Type = enum {
 	date,
 };
 
-
 // gets a typed.Value from a std.json.Value
 pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!Value {
 	const value = optional_value orelse {
@@ -156,7 +155,6 @@ pub fn newT(comptime T: type, allocator: Allocator, value: anytype) !Value {
 }
 
 const t = @import("t.zig");
-
 test "typed: new" {
 	try t.expectEqual(true, (try new(undefined, true)).bool);
 	try t.expectEqual(@as(i64, 33), (try new(undefined, 33)).i64);

@@ -110,21 +110,14 @@ pub const Map = struct {
 		return true;
 	}
 
-	pub fn jsonStringify(self: Map, options: std.json.StringifyOptions, out: anytype) @TypeOf(out).Error!void {
-		try out.writeByte('{');
-		var first = true;
+	pub fn jsonStringify(self: Map, out: anytype) !void {
+		try out.beginObject();
 		var it = self.m.iterator();
 		while (it.next()) |entry| {
-			if (first) {
-				first = false;
-			} else {
-				try out.writeByte(',');
-			}
-			try std.json.encodeJsonString(entry.key_ptr.*, options, out);
-			try out.writeByte(':');
-			try std.json.stringify(entry.value_ptr.*, options, out);
+			try out.objectField(entry.key_ptr.*);
+			try out.write(entry.value_ptr.*);
 		}
-		try out.writeByte('}');
+		try out.endObject();
 	}
 };
 
