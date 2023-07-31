@@ -100,72 +100,64 @@ pub const Value = union(Type) {
 
 	pub fn jsonStringify(self: Value, out: anytype) !void {
 		switch (self) {
-			.null => return out.writePreformatted("null"),
-			.bool => |v| return out.writePreformatted(if (v) "true" else "false"),
+			.null => return out.print("null", .{}),
+			.bool => |v| return out.print("{s}", .{if (v) "true" else "false"}),
 			.i8 => |v| {
 				var buf: [4]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.i16 => |v| {
 				var buf: [6]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.i32 => |v| {
 				var buf: [11]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.i64 => |v| {
 				var buf: [20]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.i128 => |v| {
 				var buf: [40]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.u8 => |v| {
 				var buf: [3]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.u16 => |v| {
 				var buf: [5]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.u32 => |v| {
 				var buf: [10]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.u64 => |v| {
 				var buf: [19]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.u128 => |v| {
 				var buf: [39]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
-			.f32 => |v| {
-				// https://github.com/ziglang/zig/issues/16519
-				try out.writePreformatted("");
-				try std.fmt.formatFloatDecimal(v, .{}, out.stream);
-			},
-			.f64 => |v| {
-				// https://github.com/ziglang/zig/issues/16519
-				try out.writePreformatted("");
-				try std.fmt.formatFloatDecimal(v, .{}, out.stream);
-			},
+			.f32 => |v| try out.print("{d}", .{v}),
+			.f64 => |v| try out.print("{d}", .{v}),
 			.timestamp => |v| {
 				var buf: [20]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v.micros, 10, .lower, .{});
-				try out.writePreformatted(buf[0..n]);
+				try out.print("{s}", .{buf[0..n]});
 			},
 			.array => |arr| {
 				try out.beginArray();

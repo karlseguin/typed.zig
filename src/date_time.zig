@@ -80,7 +80,7 @@ pub const Date = struct {
 		const n = self.bufWrite(buf[1..12]);
 		buf[0] = '"';
 		buf[n+1] = '"';
-		try out.writePreformatted(buf[0..n+2]);
+		try out.print("{s}", .{buf[0..n+2]});
 	}
 
 	fn bufWrite(self: Date, into: []u8) u8 {
@@ -193,7 +193,7 @@ pub const Time = struct {
 		const n = self.bufWrite(buf[1..16]);
 		buf[0] = '"';
 		buf[n+1] = '"';
-		try out.writePreformatted(buf[0..n+2]);
+		try out.print("{s}", .{buf[0..n+2]});
 	}
 
 	fn bufWrite(self: Time, buf: []u8) u8 {
