@@ -31,8 +31,8 @@ pub const Type = enum {
 	map,
 	array,
 	time,
-	timestamp,
 	date,
+	timestamp,
 };
 
 // gets a typed.Value from a std.json.Value
