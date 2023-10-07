@@ -118,7 +118,7 @@ pub const Value = union(Type) {
 				try out.print("{s}", .{buf[0..n]});
 			},
 			.i64 => |v| {
-				var buf: [20]u8 = undefined;
+				var buf: [21]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
 				try out.print("{s}", .{buf[0..n]});
 			},
@@ -143,7 +143,7 @@ pub const Value = union(Type) {
 				try out.print("{s}", .{buf[0..n]});
 			},
 			.u64 => |v| {
-				var buf: [19]u8 = undefined;
+				var buf: [20]u8 = undefined;
 				const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
 				try out.print("{s}", .{buf[0..n]});
 			},
