@@ -367,7 +367,7 @@ test "map: string" {
 
 	{
 		//dynamic string
-		var flow = try t.allocator.alloc(u8, 4);
+		const flow = try t.allocator.alloc(u8, 4);
 		defer t.allocator.free(flow);
 		@memcpy(flow, "flow");
 		try map.put("spice", flow);

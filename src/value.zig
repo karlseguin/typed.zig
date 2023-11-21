@@ -282,56 +282,56 @@ pub const Value = union(Type) {
 const t = @import("t.zig");
 test "value: toString" {
 	{
-		var str = try (Value{.i8 = -32}).toString(t.allocator, .{});
+		const str = try (Value{.i8 = -32}).toString(t.allocator, .{});
 		defer t.allocator.free(str);
 		try t.expectString("-32", str);
 	}
 
 	{
-		var str = try (Value{.f64 = -392932.1992321382}).toString(t.allocator, .{});
+		const str = try (Value{.f64 = -392932.1992321382}).toString(t.allocator, .{});
 		defer t.allocator.free(str);
 		try t.expectString("-392932.1992321382", str);
 	}
 
 	{ //null
 		{
-			var str = try (Value{.null = {}}).toString(t.allocator, .{});
+			const str = try (Value{.null = {}}).toString(t.allocator, .{});
 			defer t.allocator.free(str);
 			try t.expectString("null", str);
 		}
 		{
-			var str = try (Value{.null = {}}).toString(t.allocator, .{.force_dupe = false});
+			const str = try (Value{.null = {}}).toString(t.allocator, .{.force_dupe = false});
 			try t.expectString("null", str);
 		}
 	}
 
 	{ //bool
 		{
-			var str = try (Value{.bool = true}).toString(t.allocator, .{});
+			const str = try (Value{.bool = true}).toString(t.allocator, .{});
 			defer t.allocator.free(str);
 			try t.expectString("true", str);
 		}
 		{
-			var str = try (Value{.bool = false}).toString(t.allocator, .{.force_dupe = false});
+			const str = try (Value{.bool = false}).toString(t.allocator, .{.force_dupe = false});
 			try t.expectString("false", str);
 		}
 	}
 
 	{ // string
 		{
-			var str = try (Value{.string = "hello"}).toString(t.allocator, .{});
+			const str = try (Value{.string = "hello"}).toString(t.allocator, .{});
 			defer t.allocator.free(str);
 			try t.expectString("hello", str);
 		}
 
 		{
-			var str = try (Value{.string = "hello2"}).toString(t.allocator, .{.force_dupe = false});
+			const str = try (Value{.string = "hello2"}).toString(t.allocator, .{.force_dupe = false});
 			try t.expectString("hello2", str);
 		}
 	}
 
 	{
-		var value = try typed.new(t.allocator, [_]f64{1.1, 2.2, -3.3});
+		const value = try typed.new(t.allocator, [_]f64{1.1, 2.2, -3.3});
 		defer value.deinit();
 		try t.expectError(error.NotAString, value.toString(undefined, .{}));
 	}
