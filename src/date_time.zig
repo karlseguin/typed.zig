@@ -101,9 +101,9 @@ pub const Date = struct {
 		}
 
 		buf[0] = '-';
-		paddingTwoDigits(buf[1..3], self.month);
+		buf[1..3].* = paddingTwoDigits(self.month);
 		buf[3] = '-';
-		paddingTwoDigits(buf[4..6], self.day);
+		buf[4..6].* = paddingTwoDigits(self.day);
 
 		if (year < 0) {
 			return 11;
@@ -198,11 +198,11 @@ pub const Time = struct {
 
 	fn bufWrite(self: Time, buf: []u8) u8 {
 		std.debug.assert(buf.len == 15);
-		paddingTwoDigits(buf[0..2], self.hour);
+		buf[0..2].* = paddingTwoDigits(self.hour);
 		buf[2] = ':';
-		paddingTwoDigits(buf[3..5], self.min);
+		buf[3..5].* = paddingTwoDigits(self.min);
 		buf[5] = ':';
-		paddingTwoDigits(buf[6..8], self.sec);
+		buf[6..8].* = paddingTwoDigits(self.sec);
 
 		const micros = self.micros;
 		if (micros == 0) {
@@ -227,70 +227,13 @@ pub const Timestamp = struct {
 	}
 };
 
-fn paddingTwoDigits(buf: *[2]u8, value: u8) void {
-	switch (value) {
-		0 => buf.* = "00".*,
-		1 => buf.* = "01".*,
-		2 => buf.* = "02".*,
-		3 => buf.* = "03".*,
-		4 => buf.* = "04".*,
-		5 => buf.* = "05".*,
-		6 => buf.* = "06".*,
-		7 => buf.* = "07".*,
-		8 => buf.* = "08".*,
-		9 => buf.* = "09".*,
-		10 => buf.* = "10".*,
-		11 => buf.* = "11".*,
-		12 => buf.* = "12".*,
-		13 => buf.* = "13".*,
-		14 => buf.* = "14".*,
-		15 => buf.* = "15".*,
-		16 => buf.* = "16".*,
-		17 => buf.* = "17".*,
-		18 => buf.* = "18".*,
-		19 => buf.* = "19".*,
-		20 => buf.* = "20".*,
-		21 => buf.* = "21".*,
-		22 => buf.* = "22".*,
-		23 => buf.* = "23".*,
-		24 => buf.* = "24".*,
-		25 => buf.* = "25".*,
-		26 => buf.* = "26".*,
-		27 => buf.* = "27".*,
-		28 => buf.* = "28".*,
-		29 => buf.* = "29".*,
-		30 => buf.* = "30".*,
-		31 => buf.* = "31".*,
-		32 => buf.* = "32".*,
-		33 => buf.* = "33".*,
-		34 => buf.* = "34".*,
-		35 => buf.* = "35".*,
-		36 => buf.* = "36".*,
-		37 => buf.* = "37".*,
-		38 => buf.* = "38".*,
-		39 => buf.* = "39".*,
-		40 => buf.* = "40".*,
-		41 => buf.* = "41".*,
-		42 => buf.* = "42".*,
-		43 => buf.* = "43".*,
-		44 => buf.* = "44".*,
-		45 => buf.* = "45".*,
-		46 => buf.* = "46".*,
-		47 => buf.* = "47".*,
-		48 => buf.* = "48".*,
-		49 => buf.* = "49".*,
-		50 => buf.* = "50".*,
-		51 => buf.* = "51".*,
-		52 => buf.* = "52".*,
-		53 => buf.* = "53".*,
-		54 => buf.* = "54".*,
-		55 => buf.* = "55".*,
-		56 => buf.* = "56".*,
-		57 => buf.* = "57".*,
-		58 => buf.* = "58".*,
-		59 => buf.* = "59".*,
-		else => _ = std.fmt.formatIntBuf(buf, value, 10, .lower, .{}),
-	}
+fn paddingTwoDigits(value: u8) [2]u8 {
+	std.debug.assert(value < 61);
+	const digits = "0001020304050607080910111213141516171819" ++
+		"2021222324252627282930313233343536373839" ++
+		"4041424344454647484950515253545556575859" ++
+		"60";
+	return digits[value * 2 ..][0..2].*;
 }
 
 fn parseInt(comptime T: type, buf: []const u8) ?T {
