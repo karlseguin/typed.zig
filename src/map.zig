@@ -77,18 +77,18 @@ pub const Map = struct {
 		return self.m.get(key);
 	}
 
-	pub fn get(self: Map, comptime T: type, key: []const u8) Value.optionalReturnType(T) {
+	pub fn get(self: Map, comptime T: type, key: []const u8) Value.OptionalReturnType(T) {
 		if (self.m.get(key)) |v| {
 			return v.get(T);
 		}
 		return null;
 	}
 
-	pub fn mustGet(self: Map, comptime T: type, key: []const u8) Value.returnType(T) {
+	pub fn mustGet(self: Map, comptime T: type, key: []const u8) Value.ReturnType(T) {
 		return self.get(T, key) orelse unreachable;
 	}
 
-	pub fn strictGet(self: Map, comptime T: type, key: []const u8) !Value.returnType(T) {
+	pub fn strictGet(self: Map, comptime T: type, key: []const u8) !Value.ReturnType(T) {
 		if (self.m.get(key)) |v| {
 			return v.strictGet(T);
 		}

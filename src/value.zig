@@ -47,11 +47,11 @@ pub const Value = union(Type) {
 		}
 	}
 
-	pub fn get(self: Value, comptime T: type) optionalReturnType(T) {
+	pub fn get(self: Value, comptime T: type) OptionalReturnType(T) {
 		return self.strictGet(T) catch return null;
 	}
 
-	pub fn strictGet(self: Value, comptime T: type) !returnType(T) {
+	pub fn strictGet(self: Value, comptime T: type) !ReturnType(T) {
 		switch (@typeInfo(T)) {
 			.Optional => |opt| {
 				switch (self) {
@@ -87,7 +87,7 @@ pub const Value = union(Type) {
 		return error.WrongType;
 	}
 
-	pub fn mustGet(self: Value, comptime T: type) returnType(T) {
+	pub fn mustGet(self: Value, comptime T: type) ReturnType(T) {
 		return self.get(T) orelse unreachable;
 	}
 
@@ -258,7 +258,7 @@ pub const Value = union(Type) {
 	// instead of the more verbose:
 	//    get([]const u8, "somekey")
 	// In both cases, []const u8 is returned.
-	pub fn returnType(comptime T: type) type {
+	pub fn ReturnType(comptime T: type) type {
 		return switch (T) {
 			[]u8 => []const u8,
 			?[]u8 => ?[]const u8,
@@ -271,10 +271,10 @@ pub const Value = union(Type) {
 	// then the return type will be ??T, which is not what we want.
 	// When T is an optional (e.g. ?u32), this returns T
 	// When T is not an optional (e.g. u32). this returns ?T
-	pub fn optionalReturnType(comptime T: type) type {
+	pub fn OptionalReturnType(comptime T: type) type {
 		return switch (@typeInfo(T)) {
-			.Optional => |o| returnType(o.child),
-			else => returnType(?T),
+			.Optional => |o| ReturnType(o.child),
+			else => ReturnType(?T),
 		};
 	}
 };
