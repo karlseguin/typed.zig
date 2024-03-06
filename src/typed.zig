@@ -61,10 +61,7 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
 }
 
 pub fn new(allocator: Allocator, value: anytype) !Value {
-	return newT(@TypeOf(value), allocator, value);
-}
-
-pub fn newT(comptime T: type, allocator: Allocator, value: anytype) !Value {
+	const T = @TypeOf(value);
 	switch (@typeInfo(T)) {
 		.Null => return .{.null = {}},
 		.Int => |int| {
@@ -102,9 +99,9 @@ pub fn newT(comptime T: type, allocator: Allocator, value: anytype) !Value {
 			.One => switch (@typeInfo(ptr.child)) {
 				.Array => {
 					const Slice = []const std.meta.Elem(ptr.child);
-					return newT(Slice, allocator, @as(Slice, value));
+					return new(allocator, @as(Slice, value));
 				},
-				else => return newT(@TypeOf(value.*), allocator, value.*),
+				else => return new(allocator, value.*),
 			}
 			.Many, .Slice => {
 				if (ptr.size == .Many and ptr.sentinel == null) {
@@ -117,13 +114,13 @@ pub fn newT(comptime T: type, allocator: Allocator, value: anytype) !Value {
 				var arr = Array.init(allocator);
 				try arr.ensureTotalCapacity(slice.len);
 				for (slice) |v| {
-					arr.appendAssumeCapacity(try newT(child, allocator, v));
+					arr.appendAssumeCapacity(try new(allocator, v));
 				}
 				return .{.array = arr};
 			},
 			else => return error.UnsupportedValueTypeC,
 		},
-		.Array => return newT(@TypeOf(&value), allocator, &value),
+		.Array => return new(allocator, &value),
 		.Struct => |s| {
 			if (T == Map) return .{.map = value};
 			if (T == Array) return .{.array = value};
@@ -140,7 +137,7 @@ pub fn newT(comptime T: type, allocator: Allocator, value: anytype) !Value {
 		},
 		.Optional => |opt| {
 			if (value) |v| {
-				return newT(opt.child, allocator, v);
+				return new(allocator, @as(opt.child, v));
 			}
 			return .{.null = {}};
 		},
@@ -171,19 +168,19 @@ test "typed: new" {
 	{
 		var m = (try new(t.allocator, .{.name = "Leto", .location = .{.birth = "Caladan", .present = "Arrakis"}, .age = 3000})).map;
 		defer m.deinit();
-		try t.expectEqual(@as(i64, 3000), m.get(i64, "age").?);
-		try t.expectString("Caladan", m.get(Map, "location").?.get([]u8, "birth").?);
-		try t.expectString("Arrakis", m.get(Map, "location").?.get([]u8, "present").?);
-		try t.expectString("Leto", m.get([]u8, "name").?);
+		try t.expectEqual(3000, m.get("age").?.i64);
+		try t.expectString("Caladan", m.get("location").?.map.get("birth").?.string);
+		try t.expectString("Arrakis", m.get("location").?.map.get("present").?.string);
+		try t.expectString("Leto", m.get("name").?.string);
 	}
 
 	{
 		var l = (try new(t.allocator, [3]i32{-32, 38181354, -984})).array;
 		defer l.deinit();
-		try t.expectEqual(@as(usize, 3), l.items.len);
-		try t.expectEqual(@as(i32, -32), l.items[0].i32);
-		try t.expectEqual(@as(i32, 38181354), l.items[1].i32);
-		try t.expectEqual(@as(i32, -984), l.items[2].i32);
+		try t.expectEqual(3, l.items.len);
+		try t.expectEqual(-32, l.items[0].i32);
+		try t.expectEqual(38181354, l.items[1].i32);
+		try t.expectEqual(-984, l.items[2].i32);
 	}
 }
 
@@ -227,11 +224,11 @@ test "typed: fromJson" {
 
 		var tm = (try fromJson(t.allocator, json.Value{.object = json_object1})).map;
 		defer tm.deinit();
-		try t.expectEqual(@as(usize, 2), tm.count());
-		try t.expectEqual(@as(i64, 33), tm.mustGet(i64, "k1"));
+		try t.expectEqual(2, tm.count());
+		try t.expectEqual(33, tm.get("k1").?.i64);
 
-		var ta = tm.mustGet(Array, "k2");
+		var ta = tm.get("k2").?.array;
 		try t.expectEqual(true, ta.items[0].mustGet(bool));
-		try t.expectEqual(@as(f64, 0.3211), ta.items[1].mustGet(Map).mustGet(f64, "k3"));
+		try t.expectEqual(0.3211, ta.items[1].mustGet(Map).get("k3").?.f64);
 	}
 }

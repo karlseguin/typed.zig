@@ -1,4 +1,6 @@
 const std = @import("std");
+const json = std.json;
+
 const typed = @import("typed.zig");
 
 const Map = typed.Map;
@@ -51,7 +53,7 @@ pub const Value = union(Type) {
 		return self.strictGet(T) catch return null;
 	}
 
-	pub fn strictGet(self: Value, comptime T: type) !ReturnType(T) {
+	pub fn strictGet(self: Value, comptime T: type) !T {
 		switch (@typeInfo(T)) {
 			.Optional => |opt| {
 				switch (self) {
@@ -87,7 +89,7 @@ pub const Value = union(Type) {
 		return error.WrongType;
 	}
 
-	pub fn mustGet(self: Value, comptime T: type) ReturnType(T) {
+	pub fn mustGet(self: Value, comptime T: type) T {
 		return self.get(T) orelse unreachable;
 	}
 
@@ -174,6 +176,11 @@ pub const Value = union(Type) {
 		}
 	}
 
+	pub fn jsonParse(allocator: Allocator, source: anytype, options: json.ParseOptions) json.ParseError(@TypeOf(source.*))!Value {
+		const token = try source.nextAlloc(allocator, .alloc_if_needed);
+		return jsonTokenToValue(allocator, source, options, token);
+	}
+
 	// For null, bool and string, toString() doesn't require any allocations. But
 	// our caller might not know this and if we don't allocate, but they call free
 	// they'll crash. By default, we'll dupe everything, so that callers can safely
@@ -253,19 +260,6 @@ pub const Value = union(Type) {
 		}
 	}
 
-	// hack so that we can call:
-	//    get([]u8, "somekey")
-	// instead of the more verbose:
-	//    get([]const u8, "somekey")
-	// In both cases, []const u8 is returned.
-	pub fn ReturnType(comptime T: type) type {
-		return switch (T) {
-			[]u8 => []const u8,
-			?[]u8 => ?[]const u8,
-			else => T
-		};
-	}
-
 	// Some functions, like get, always return an optional type.
 	// but if we just define the type as `?T`, if the user asks does map.get(?u32, "key")
 	// then the return type will be ??T, which is not what we want.
@@ -273,13 +267,110 @@ pub const Value = union(Type) {
 	// When T is not an optional (e.g. u32). this returns ?T
 	pub fn OptionalReturnType(comptime T: type) type {
 		return switch (@typeInfo(T)) {
-			.Optional => |o| ReturnType(o.child),
-			else => ReturnType(?T),
+			.Optional => |o| o.child,
+			else => ?T,
 		};
 	}
 };
 
+fn jsonTokenToValue(allocator: Allocator, source: anytype, options: json.ParseOptions, token: json.Token) !Value {
+	switch (token) {
+		.allocated_string => |str| return .{.string = str },
+		.string => |str| return .{.string = try allocator.dupe(u8, str) },
+		inline .number, .allocated_number => |str| {
+			const result = parseJsonInteger(str);
+			if (result.rest.len == 0) {
+				const value = result.value;
+				if (result.negative) {
+					return if (value == 0) .{.f64 = -0.0} else .{.i64 = -value};
+				}
+				return .{.i64 = value};
+			} else {
+				return .{.f64 = std.fmt.parseFloat(f64, str) catch unreachable};
+			}
+		},
+		.null => return .{.null = {}},
+		.true => return .{.bool = true},
+		.false => return .{.bool = false},
+		.object_begin => return .{.map = try @import("map.zig").mapFromJsonObject(allocator, source, options)},
+		.array_begin => return .{.array = try arrayFromJson(allocator, source, options)	 },
+		else => {
+			unreachable;
+		},
+	}
+}
+
+const ParseJsonIntegerResult = struct {
+	value: i64,
+	negative: bool,
+	rest: []const u8,
+};
+
+fn parseJsonInteger(str: []const u8) ParseJsonIntegerResult {
+	std.debug.assert(str.len != 0);
+
+	var pos: usize = 0;
+	var negative = false;
+	if (str[0] == '-') {
+		pos = 1;
+		negative = true;
+	}
+
+	var n: i64 = 0;
+	for (str[pos..]) |b| {
+		if (b < '0' or b > '9') {
+			break;
+		}
+
+		pos += 1;
+		n = n * 10 + @as(i64, @intCast(b - '0'));
+	}
+
+	return .{
+		.value = n,
+		.negative = negative,
+		.rest = str[pos..],
+	};
+}
+
+fn arrayFromJson(allocator: Allocator, source: anytype, options: json.ParseOptions) json.ParseError(@TypeOf(source.*))!Array {
+	var arr = Array.init(allocator);
+	errdefer arr.deinit();
+
+	while (true) {
+		const token = try source.nextAlloc(allocator, options.allocate.?);
+		switch (token) {
+			.array_end => break,
+			else => try arr.append(try jsonTokenToValue(allocator, source, options, token)),
+		}
+	}
+	return arr;
+}
+
 const t = @import("t.zig");
+test "parseJsonInteger" {
+	const assertResult = struct {
+		fn assertFn(input: []const u8, expected: ParseJsonIntegerResult) !void {
+			const actual = parseJsonInteger(input);
+			try t.expectString(expected.rest, actual.rest);
+			try t.expectEqual(expected.value, actual.value);
+			try t.expectEqual(expected.negative, actual.negative);
+		}
+	}.assertFn;
+
+	try assertResult("0", .{.value = 0, .negative = false, .rest = ""});
+	try assertResult("-0", .{.value = 0, .negative = true, .rest = ""});
+
+	try assertResult("9223372036854775807", .{.value = 9223372036854775807, .negative = false, .rest = ""});
+	try assertResult("-9223372036854775807", .{.value = 9223372036854775807, .negative = true, .rest = ""});
+
+	try assertResult("0.01", .{.value = 0, .negative = false, .rest = ".01"});
+	try assertResult("-0.992", .{.value = 0, .negative = true, .rest = ".992"});
+
+	try assertResult("1234.5678", .{.value = 1234, .negative = false, .rest = ".5678"});
+	try assertResult("-9998.8747281", .{.value = 9998, .negative = true, .rest = ".8747281"});
+}
+
 test "value: toString" {
 	{
 		const str = try (Value{.i8 = -32}).toString(t.allocator, .{});
