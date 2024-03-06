@@ -128,7 +128,7 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
 			if (T == Array) return .{.array = value};
 			if (T == Date) return .{.date = value};
 			if (T == Time) return .{.time = value};
-			if (T == DatTime) return .{.datetime = value};
+			if (T == DateTime) return .{.datetime = value};
 			if (T == Timestamp) return .{.timestamp = value};
 
 			var m = Map.init(allocator);
