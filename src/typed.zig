@@ -9,6 +9,7 @@ pub const Map = @import("map.zig").Map;
 pub const Value = @import("value.zig").Value;
 pub const Date = datetime.Date;
 pub const Time = datetime.Time;
+pub const DateTime = datetime.DateTime;
 pub const Timestamp = datetime.Timestamp;
 pub const Array = ArrayList(Value);
 
@@ -32,6 +33,7 @@ pub const Type = enum {
 	array,
 	time,
 	date,
+	datetime,
 	timestamp,
 };
 
@@ -126,6 +128,7 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
 			if (T == Array) return .{.array = value};
 			if (T == Date) return .{.date = value};
 			if (T == Time) return .{.time = value};
+			if (T == DatTime) return .{.datetime = value};
 			if (T == Timestamp) return .{.timestamp = value};
 
 			var m = Map.init(allocator);

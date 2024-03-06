@@ -8,6 +8,7 @@ const Type = typed.Type;
 const Time = typed.Time;
 const Date = typed.Date;
 const Array = typed.Array;
+const DateTime = typed.DateTime;
 const Timestamp = typed.Timestamp;
 const Allocator = std.mem.Allocator;
 
@@ -31,6 +32,7 @@ pub const Value = union(Type) {
 	array: Array,
 	time: Time,
 	date: Date,
+	datetime: DateTime,
 	timestamp: Timestamp,
 
 	pub fn deinit(self: Value) void {
@@ -83,6 +85,7 @@ pub const Value = union(Type) {
 			Array => switch (self) {.array => |v| return v, else => {}},
 			Time => switch (self) {.time => |v| return v, else => {}},
 			Date => switch (self) {.date => |v| return v, else => {}},
+			DateTime => switch (self) {.datetime => |v| return v, else => {}},
 			Timestamp => switch (self) {.timestamp => |v| return v, else => {}},
 			else => |other| @compileError("Unsupported type: " ++ @typeName(other)),
 		}
@@ -252,6 +255,11 @@ pub const Value = union(Type) {
 				return allocator.dupe(u8, stream.getWritten());
 			},
 			.date => |v| {
+				var stream = std.io.fixedBufferStream(&buf);
+				try v.format("{s}", .{}, stream.writer());
+				return allocator.dupe(u8, stream.getWritten());
+			},
+			.datetime => |v| {
 				var stream = std.io.fixedBufferStream(&buf);
 				try v.format("{s}", .{}, stream.writer());
 				return allocator.dupe(u8, stream.getWritten());
