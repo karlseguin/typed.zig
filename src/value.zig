@@ -286,7 +286,7 @@ fn jsonTokenToValue(allocator: Allocator, source: anytype, options: json.ParseOp
 		.allocated_string => |str| return .{.string = str },
 		.string => |str| return .{.string = try allocator.dupe(u8, str) },
 		inline .number, .allocated_number => |str| {
-			const result = parseJsonInteger(str);
+			const result = try parseJsonInteger(str);
 			if (result.rest.len == 0) {
 				const value = result.value;
 				if (result.negative) {
@@ -314,7 +314,7 @@ const ParseJsonIntegerResult = struct {
 	rest: []const u8,
 };
 
-fn parseJsonInteger(str: []const u8) ParseJsonIntegerResult {
+fn parseJsonInteger(str: []const u8) error{InvalidNumber}!ParseJsonIntegerResult {
 	std.debug.assert(str.len != 0);
 
 	var pos: usize = 0;
@@ -331,7 +331,18 @@ fn parseJsonInteger(str: []const u8) ParseJsonIntegerResult {
 		}
 
 		pos += 1;
-		n = n * 10 + @as(i64, @intCast(b - '0'));
+		{
+			n, const overflowed = @mulWithOverflow(n, 10);
+			if (overflowed != 0) {
+				return error.InvalidNumber;
+			}
+		}
+		{
+			n, const overflowed = @addWithOverflow(n, @as(i64, @intCast(b - '0')));
+			if (overflowed != 0) {
+				return error.InvalidNumber;
+			}
+		}
 	}
 
 	return .{
@@ -359,7 +370,7 @@ const t = @import("t.zig");
 test "parseJsonInteger" {
 	const assertResult = struct {
 		fn assertFn(input: []const u8, expected: ParseJsonIntegerResult) !void {
-			const actual = parseJsonInteger(input);
+			const actual = try parseJsonInteger(input);
 			try t.expectString(expected.rest, actual.rest);
 			try t.expectEqual(expected.value, actual.value);
 			try t.expectEqual(expected.negative, actual.negative);
@@ -377,6 +388,8 @@ test "parseJsonInteger" {
 
 	try assertResult("1234.5678", .{.value = 1234, .negative = false, .rest = ".5678"});
 	try assertResult("-9998.8747281", .{.value = 9998, .negative = true, .rest = ".8747281"});
+
+	try t.expectError(error.InvalidNumber, parseJsonInteger("9223372036854775808"));
 }
 
 test "value: toString" {

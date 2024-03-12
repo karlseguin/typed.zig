@@ -3,36 +3,50 @@ const typed = @import("typed.zig");
 
 const Value = typed.Value;
 const Array = typed.Array;
-const StringHashMap = std.StringHashMap;
 const Allocator = std.mem.Allocator;
+const StringHashMapUnmanaged = std.StringHashMapUnmanaged;
 
 pub const Map = struct {
-	m: StringHashMap(Value),
+	allocator: Allocator,
+	unmanaged: StringHashMapUnmanaged(Value),
 
 	pub fn init(allocator: Allocator) Map {
 		return .{
-			.m = StringHashMap(Value).init(allocator),
+			.allocator = allocator,
+			.unmanaged = StringHashMapUnmanaged(Value){},
 		};
 	}
 
 	pub fn deinit(self: *Map) void {
-		var it = self.m.valueIterator();
+		var it = self.valueIterator();
 		while (it.next()) |value| {
 			value.deinit();
 		}
-		self.m.deinit();
+		self.unmanaged.deinit(self.allocator);
 	}
 
 	pub fn fromJson(allocator: Allocator, obj: std.json.ObjectMap) !Map {
 		var to = init(allocator);
-		var map = &to.m;
-		try map.ensureTotalCapacity(@intCast(obj.count()));
+		var unmanaged = &to.unmanaged;
+		try unmanaged.ensureTotalCapacity(allocator, @intCast(obj.count()));
 
 		var it = obj.iterator();
 		while (it.next()) |entry| {
-			map.putAssumeCapacity(entry.key_ptr.*, try typed.fromJson(allocator, entry.value_ptr.*));
+			unmanaged.putAssumeCapacity(entry.key_ptr.*, try typed.fromJson(allocator, entry.value_ptr.*));
 		}
 		return to;
+	}
+
+	pub fn iterator(self: *const Map) StringHashMapUnmanaged(Value).Iterator {
+		return self.unmanaged.iterator();
+	}
+
+	pub fn keyIterator(self: *const Map) StringHashMapUnmanaged(Value).KeyIterator {
+			return self.unmanaged.keyIterator();
+	}
+
+	pub fn valueIterator(self: *const Map) StringHashMapUnmanaged(Value).ValueIterator {
+			return self.unmanaged.valueIterator();
 	}
 
 	// dangerous!
@@ -41,20 +55,20 @@ pub const Map = struct {
 	}
 
 	pub fn ensureTotalCapacity(self: *Map, size: u32) !void {
-		return self.m.ensureTotalCapacity(size);
+		return self.unmanaged.ensureTotalCapacity(self.allocator, size);
 	}
 
 	pub fn ensureUnusedCapacity(self: *Map, size: u32) !void {
-		return self.m.ensureUnusedCapacity(size);
+		return self.unmanaged.ensureUnusedCapacity(size);
 	}
 
 	pub fn put(self: *Map, key: []const u8, value: anytype) !void {
-		return self.m.put(key, try typed.new(self.m.allocator, value));
+		return self.unmanaged.put(self.allocator, key, try typed.new(self.allocator, value));
 	}
 
 	pub fn putAll(self: *Map, values: anytype) !void {
 		const fields = std.meta.fields(@TypeOf(values));
-		try self.m.ensureUnusedCapacity(fields.len);
+		try self.unmanaged.ensureUnusedCapacity(self.allocator, fields.len);
 
 		inline for (fields) |field| {
 			try self.putAssumeCapacity(field.name, @field(values, field.name));
@@ -62,19 +76,19 @@ pub const Map = struct {
 	}
 
 	pub fn putAssumeCapacity(self: *Map, key: []const u8, value: anytype) !void {
-		self.m.putAssumeCapacity(key, try typed.new(self.m.allocator, value));
+		self.unmanaged.putAssumeCapacity(key, try typed.new(self.allocator, value));
 	}
 
 	pub fn get(self: Map, key: []const u8) ?Value {
-		return self.m.get(key);
+		return self.unmanaged.get(key);
 	}
 
 	pub fn contains(self: Map, key: []const u8) bool {
-		return self.m.contains(key);
+		return self.unmanaged.contains(key);
 	}
 
 	pub fn count(self: Map) usize {
-		return self.m.count();
+		return self.unmanaged.count();
 	}
 
 	pub fn isNull(self: Map, key: []const u8) bool {
@@ -86,7 +100,7 @@ pub const Map = struct {
 
 	pub fn jsonStringify(self: Map, out: anytype) !void {
 		try out.beginObject();
-		var it = self.m.iterator();
+		var it = self.iterator();
 		while (it.next()) |entry| {
 			try out.objectField(entry.key_ptr.*);
 			try out.write(entry.value_ptr.*);
@@ -113,7 +127,7 @@ pub fn mapFromJsonObject(allocator: Allocator, source: anytype, options: std.jso
 		switch (token) {
 			inline .string, .allocated_string => |k| {
 				const v = try Value.jsonParse(allocator, source, options);
-				try map.m.put(k, v);
+				try map.unmanaged.put(allocator, k, v);
 			},
 			.object_end => break,
 			else => unreachable,
@@ -192,7 +206,7 @@ test "map: putAll" {
 	try t.expectEqual(true, map.get("ok").?.bool);
 	try t.expectEqual(9000, map.get("over").?.i64);
 	try t.expectString("flow", map.get("spice").?.string);
-	try t.expectEqual(3, map.m.count());
+	try t.expectEqual(3, map.count());
 }
 
 test "map: putAssumeCapacity" {

@@ -222,7 +222,6 @@ pub const DateTime = struct {
 		microseconds,
 	};
 
-
 	pub const TimeUnit = enum {
 		days,
 		hours,
