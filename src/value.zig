@@ -57,7 +57,7 @@ pub const Value = union(Type) {
 
 	pub fn strictGet(self: Value, comptime T: type) !T {
 		switch (@typeInfo(T)) {
-			.Optional => |opt| {
+			.optional => |opt| {
 				switch (self) {
 					.null => return null,
 					else => return try self.strictGet(opt.child),
@@ -275,7 +275,7 @@ pub const Value = union(Type) {
 	// When T is not an optional (e.g. u32). this returns ?T
 	pub fn OptionalReturnType(comptime T: type) type {
 		return switch (@typeInfo(T)) {
-			.Optional => |o| o.child,
+			.optional => |o| o.child,
 			else => ?T,
 		};
 	}

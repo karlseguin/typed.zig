@@ -65,8 +65,8 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
 pub fn new(allocator: Allocator, value: anytype) !Value {
 	const T = @TypeOf(value);
 	switch (@typeInfo(T)) {
-		.Null => return .{.null = {}},
-		.Int => |int| {
+		.null => return .{.null = {}},
+		.int => |int| {
 			if (int.signedness == .signed) {
 				switch (int.bits) {
 					1...8 => return .{.i8 = value},
@@ -87,19 +87,19 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
 				}
 			}
 		},
-		.Float => |float| {
+		.float => |float| {
 			switch (float.bits) {
 				1...32 => return .{.f32 = value},
 				33...64 => return .{.f64 = value},
 				else => return error.UnsupportedValueType,
 			}
 		},
-		.Bool => return .{.bool = value},
-		.ComptimeInt => return .{.i64 = value},
-		.ComptimeFloat => return .{.f64 = value},
-		.Pointer => |ptr| switch (ptr.size) {
+		.bool => return .{.bool = value},
+		.comptime_int => return .{.i64 = value},
+		.comptime_float => return .{.f64 = value},
+		.pointer => |ptr| switch (ptr.size) {
 			.One => switch (@typeInfo(ptr.child)) {
-				.Array => {
+				.array => {
 					const Slice = []const std.meta.Elem(ptr.child);
 					return new(allocator, @as(Slice, value));
 				},
@@ -122,8 +122,8 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
 			},
 			else => return error.UnsupportedValueTypeC,
 		},
-		.Array => return new(allocator, &value),
-		.Struct => |s| {
+		.array => return new(allocator, &value),
+		.@"struct" => |s| {
 			if (T == Map) return .{.map = value};
 			if (T == Array) return .{.array = value};
 			if (T == Date) return .{.date = value};
@@ -138,13 +138,13 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
 			}
 			return .{.map = m};
 		},
-		.Optional => |opt| {
+		.optional => |opt| {
 			if (value) |v| {
 				return new(allocator, @as(opt.child, v));
 			}
 			return .{.null = {}};
 		},
-		.Union => {
+		.@"union" => {
 			if (T == Value) {
 				return value;
 			}
