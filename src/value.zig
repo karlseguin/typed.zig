@@ -324,7 +324,40 @@ pub const Value = union(Type) {
                 try v.format("{s}", .{}, stream.writer());
                 return allocator.dupe(u8, stream.getWritten());
             },
-            else => return error.NotAString,
+            .timestamp => |v| {
+                const n = std.fmt.formatIntBuf(&buf, v.micros, 10, .lower, .{});
+                return allocator.dupe(u8, buf[0..n]);
+            },
+            .map, .array => return error.NotAString,
+        }
+    }
+
+    pub const WriteOpts = struct {
+        null_value: []const u8 = "null",
+    };
+
+    pub fn write(self: Value, writer: anytype, opts: WriteOpts) !void {
+        switch (self) {
+            .string => |v| return writer.writeAll(v),
+            .null => return writer.writeAll(opts.null_value),
+            .bool => |v| return writer.writeAll(if (v) "true" else "false"),
+            .i8 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .i16 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .i32 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .i64 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .i128 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .u8 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .u16 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .u32 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .u64 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .u128 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .f32 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .f64 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .time => |v| return v.format("", .{}, writer),
+            .date => |v| return v.format("", .{}, writer),
+            .datetime => |v| return v.format("", .{}, writer),
+            .timestamp => |v| return std.fmt.formatInt(v.micros, 10, .lower, .{}, writer),
+            .map, .array => return error.NotAString,
         }
     }
 
@@ -506,5 +539,61 @@ test "value: toString" {
         const value = try typed.new(t.allocator, [_]f64{ 1.1, 2.2, -3.3 });
         defer value.deinit();
         try t.expectError(error.NotAString, value.toString(undefined, .{}));
+    }
+}
+
+test "value: write" {
+    var arr = std.ArrayList(u8).init(t.allocator);
+    defer arr.deinit();
+
+    {
+        try (Value{ .i8 = -32 }).write(arr.writer(), .{});
+        try t.expectString("-32", arr.items);
+    }
+
+    {
+        arr.clearRetainingCapacity();
+        try (Value{ .f64 = -392932.1992321382 }).write(arr.writer(), .{});
+        try t.expectString("-392932.1992321382", arr.items);
+    }
+
+    { //null
+        {
+            arr.clearRetainingCapacity();
+            try (Value{ .null = {} }).write(arr.writer(), .{});
+            try t.expectString("null", arr.items);
+        }
+        {
+            arr.clearRetainingCapacity();
+            try (Value{ .null = {} }).write(arr.writer(), .{ .null_value = "x" });
+            try t.expectString("x", arr.items);
+        }
+    }
+
+    { //bool
+        {
+            arr.clearRetainingCapacity();
+            try (Value{ .bool = true }).write(arr.writer(), .{});
+            try t.expectString("true", arr.items);
+        }
+        {
+            arr.clearRetainingCapacity();
+            try (Value{ .bool = false }).write(arr.writer(), .{});
+            try t.expectString("false", arr.items);
+        }
+    }
+
+    {
+        // string
+        arr.clearRetainingCapacity();
+        try (Value{ .string = "hello" }).write(arr.writer(), .{});
+        try t.expectString("hello", arr.items);
+    }
+
+    {
+        arr.clearRetainingCapacity();
+        const value = try typed.new(t.allocator, [_]f64{ 1.1, 2.2, -3.3 });
+        defer value.deinit();
+        try t.expectError(error.NotAString, value.write(arr.writer(), .{}));
     }
 }
