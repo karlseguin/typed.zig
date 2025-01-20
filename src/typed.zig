@@ -98,7 +98,7 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
         .comptime_int => return .{ .i64 = value },
         .comptime_float => return .{ .f64 = value },
         .pointer => |ptr| switch (ptr.size) {
-            .One => switch (@typeInfo(ptr.child)) {
+            .one => switch (@typeInfo(ptr.child)) {
                 .array => {
                     const Slice = []const std.meta.Elem(ptr.child);
                     return new(allocator, @as(Slice, value));
@@ -106,11 +106,11 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
                 else => return new(allocator, value.*),
             }
                 .Many,
-            .Slice => {
-                if (ptr.size == .Many and ptr.sentinel == null) {
+            .slice => {
+                if (ptr.size == .many and ptr.sentinel_ptr == null) {
                     return error.UnsupportedValueTypeA;
                 }
-                const slice = if (ptr.size == .Many) std.mem.span(value) else value;
+                const slice = if (ptr.size == .many) std.mem.span(value) else value;
                 const child = ptr.child;
                 if (child == u8) return .{ .string = slice };
 
