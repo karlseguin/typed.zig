@@ -51,8 +51,8 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
         .number_string => |s| return .{ .string = s }, // TODO: decide how to handle this
         .string => |s| return .{ .string = s },
         .array => |arr| {
-            var ta = Array.init(allocator);
-            try ta.ensureTotalCapacity(arr.items.len);
+            var ta = Array{};
+            try ta.ensureTotalCapacity(allocator, arr.items.len);
             for (arr.items) |json_value| {
                 ta.appendAssumeCapacity(try fromJson(allocator, json_value));
             }
@@ -114,8 +114,8 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
                 const child = ptr.child;
                 if (child == u8) return .{ .string = slice };
 
-                var arr = Array.init(allocator);
-                try arr.ensureTotalCapacity(slice.len);
+                var arr = Array{};
+                try arr.ensureTotalCapacity(allocator, slice.len);
                 for (slice) |v| {
                     arr.appendAssumeCapacity(try new(allocator, v));
                 }
@@ -163,9 +163,9 @@ test "typed: new" {
     try t.expectString("over 9000", (try new(undefined, "over 9000")).string);
 
     {
-        var list = std.ArrayList(u8).init(t.allocator);
-        defer list.deinit();
-        try list.appendSlice("i love keemun");
+        var list = std.ArrayList(u8){};
+        defer list.deinit(t.allocator);
+        try list.appendSlice(t.allocator, "i love keemun");
         try t.expectString("i love keemun", (try new(undefined, list.items)).string);
     }
 
@@ -180,7 +180,7 @@ test "typed: new" {
 
     {
         var l = (try new(t.allocator, [3]i32{ -32, 38181354, -984 })).array;
-        defer l.deinit();
+        defer l.deinit(t.allocator);
         try t.expectEqual(3, l.items.len);
         try t.expectEqual(-32, l.items[0].i32);
         try t.expectEqual(38181354, l.items[1].i32);
@@ -205,7 +205,7 @@ test "typed: fromJson" {
         try json_array.append(.{ .float = -3.4 });
 
         var ta = (try fromJson(t.allocator, json.Value{ .array = json_array })).array;
-        defer ta.deinit();
+        defer ta.deinit(t.allocator);
         try t.expectEqual(Value{ .bool = false }, ta.items[0]);
         try t.expectEqual(Value{ .f64 = -3.4 }, ta.items[1]);
     }

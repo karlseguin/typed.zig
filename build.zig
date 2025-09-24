@@ -4,14 +4,14 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    _ = b.addModule("typed", .{
-        .root_source_file = b.path("src/typed.zig"),
-    });
-
-    const lib_test = b.addTest(.{
+    const mod = b.addModule("typed", .{
         .root_source_file = b.path("src/typed.zig"),
         .target = target,
         .optimize = optimize,
+    });
+
+    const lib_test = b.addTest(.{
+        .root_module = mod,
         .test_runner = .{ .path = b.path("test_runner.zig"), .mode = .simple },
     });
     const run_test = b.addRunArtifact(lib_test);

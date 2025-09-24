@@ -41,7 +41,8 @@ pub const Value = union(Type) {
                 for (arr.items) |child| {
                     child.deinit();
                 }
-                arr.deinit();
+                var mutable_arr = arr;
+                mutable_arr.deinit(t.allocator);
             },
             .map => |map| {
                 var tm = map;
@@ -169,59 +170,81 @@ pub const Value = union(Type) {
             .bool => |v| return out.print("{s}", .{if (v) "true" else "false"}),
             .i8 => |v| {
                 var buf: [4]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .i16 => |v| {
                 var buf: [6]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .i32 => |v| {
                 var buf: [11]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .i64 => |v| {
                 var buf: [21]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .i128 => |v| {
                 var buf: [40]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .u8 => |v| {
                 var buf: [3]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .u16 => |v| {
                 var buf: [5]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .u32 => |v| {
                 var buf: [10]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .u64 => |v| {
                 var buf: [20]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .u128 => |v| {
                 var buf: [39]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .f32 => |v| try out.print("{d}", .{v}),
             .f64 => |v| try out.print("{d}", .{v}),
             .timestamp => |v| {
                 var buf: [20]u8 = undefined;
-                const n = std.fmt.formatIntBuf(&buf, v.micros, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v.micros}) catch unreachable;
+                const n = stream.getWritten().len;
                 try out.print("{s}", .{buf[0..n]});
             },
             .array => |arr| {
@@ -268,43 +291,63 @@ pub const Value = union(Type) {
                 return if (opts.force_dupe) allocator.dupe(u8, b) else b;
             },
             .i8 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .i16 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .i32 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .i64 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .i128 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .u8 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .u16 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .u32 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .u64 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .u128 => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .f32 => |v| return try std.fmt.allocPrint(allocator, "{d}", .{v}),
@@ -325,7 +368,9 @@ pub const Value = union(Type) {
                 return allocator.dupe(u8, stream.getWritten());
             },
             .timestamp => |v| {
-                const n = std.fmt.formatIntBuf(&buf, v.micros, 10, .lower, .{});
+                var stream = std.io.fixedBufferStream(&buf);
+                std.fmt.format(stream.writer(), "{d}", .{v.micros}) catch unreachable;
+                const n = stream.getWritten().len;
                 return allocator.dupe(u8, buf[0..n]);
             },
             .map, .array => return error.NotAString,
@@ -341,22 +386,22 @@ pub const Value = union(Type) {
             .string => |v| return writer.writeAll(v),
             .null => return writer.writeAll(opts.null_value),
             .bool => |v| return writer.writeAll(if (v) "true" else "false"),
-            .i8 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .i16 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .i32 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .i64 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .i128 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .u8 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .u16 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .u32 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .u64 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
-            .u128 => |v| return std.fmt.formatInt(v, 10, .lower, .{}, writer),
+            .i8 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .i16 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .i32 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .i64 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .i128 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .u8 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .u16 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .u32 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .u64 => |v| return std.fmt.format(writer, "{d}", .{v}),
+            .u128 => |v| return std.fmt.format(writer, "{d}", .{v}),
             .f32 => |v| return std.fmt.format(writer, "{d}", .{v}),
             .f64 => |v| return std.fmt.format(writer, "{d}", .{v}),
             .time => |v| return v.format("", .{}, writer),
             .date => |v| return v.format("", .{}, writer),
             .datetime => |v| return v.format("", .{}, writer),
-            .timestamp => |v| return std.fmt.formatInt(v.micros, 10, .lower, .{}, writer),
+            .timestamp => |v| return std.fmt.format(writer, "{d}", .{v.micros}),
             .map, .array => return error.NotAString,
         }
     }
@@ -446,14 +491,14 @@ fn parseJsonInteger(str: []const u8) error{InvalidNumber}!ParseJsonIntegerResult
 }
 
 fn arrayFromJson(allocator: Allocator, source: anytype, options: json.ParseOptions) json.ParseError(@TypeOf(source.*))!Array {
-    var arr = Array.init(allocator);
-    errdefer arr.deinit();
+    var arr = Array{};
+    errdefer arr.deinit(allocator);
 
     while (true) {
         const token = try source.nextAlloc(allocator, options.allocate.?);
         switch (token) {
             .array_end => break,
-            else => try arr.append(try jsonTokenToValue(allocator, source, options, token)),
+            else => try arr.append(allocator, try jsonTokenToValue(allocator, source, options, token)),
         }
     }
     return arr;
@@ -543,29 +588,29 @@ test "value: toString" {
 }
 
 test "value: write" {
-    var arr = std.ArrayList(u8).init(t.allocator);
-    defer arr.deinit();
+    var arr = std.ArrayList(u8){};
+    defer arr.deinit(t.allocator);
 
     {
-        try (Value{ .i8 = -32 }).write(arr.writer(), .{});
+        try (Value{ .i8 = -32 }).write(arr.writer(t.allocator), .{});
         try t.expectString("-32", arr.items);
     }
 
     {
         arr.clearRetainingCapacity();
-        try (Value{ .f64 = -392932.1992321382 }).write(arr.writer(), .{});
+        try (Value{ .f64 = -392932.1992321382 }).write(arr.writer(t.allocator), .{});
         try t.expectString("-392932.1992321382", arr.items);
     }
 
     { //null
         {
             arr.clearRetainingCapacity();
-            try (Value{ .null = {} }).write(arr.writer(), .{});
+            try (Value{ .null = {} }).write(arr.writer(t.allocator), .{});
             try t.expectString("null", arr.items);
         }
         {
             arr.clearRetainingCapacity();
-            try (Value{ .null = {} }).write(arr.writer(), .{ .null_value = "x" });
+            try (Value{ .null = {} }).write(arr.writer(t.allocator), .{ .null_value = "x" });
             try t.expectString("x", arr.items);
         }
     }
@@ -573,12 +618,12 @@ test "value: write" {
     { //bool
         {
             arr.clearRetainingCapacity();
-            try (Value{ .bool = true }).write(arr.writer(), .{});
+            try (Value{ .bool = true }).write(arr.writer(t.allocator), .{});
             try t.expectString("true", arr.items);
         }
         {
             arr.clearRetainingCapacity();
-            try (Value{ .bool = false }).write(arr.writer(), .{});
+            try (Value{ .bool = false }).write(arr.writer(t.allocator), .{});
             try t.expectString("false", arr.items);
         }
     }
@@ -586,7 +631,7 @@ test "value: write" {
     {
         // string
         arr.clearRetainingCapacity();
-        try (Value{ .string = "hello" }).write(arr.writer(), .{});
+        try (Value{ .string = "hello" }).write(arr.writer(t.allocator), .{});
         try t.expectString("hello", arr.items);
     }
 
@@ -594,6 +639,6 @@ test "value: write" {
         arr.clearRetainingCapacity();
         const value = try typed.new(t.allocator, [_]f64{ 1.1, 2.2, -3.3 });
         defer value.deinit();
-        try t.expectError(error.NotAString, value.write(arr.writer(), .{}));
+        try t.expectError(error.NotAString, value.write(arr.writer(t.allocator), .{}));
     }
 }
