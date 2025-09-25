@@ -187,8 +187,8 @@ test "map: array" {
     var map = Map.init(t.allocator);
     defer map.deinit();
 
-    var child = Array.init(t.allocator);
-    try child.append(.{ .i32 = 32 });
+    var child = Array{};
+    try child.append(t.allocator, .{ .i32 = 32 });
     try map.put("child", child);
 
     {
@@ -250,7 +250,7 @@ test "map: fromJson" {
     try t.expectEqual(true, ta2.items[0].bool);
     try t.expectEqual(0.3211, ta2.items[1].map.get("k3").?.f64);
 
-    const out = try std.json.stringifyAlloc(t.allocator, tm2, .{});
+    const out = try std.json.Stringify.valueAlloc(t.allocator, tm2, .{});
     defer t.allocator.free(out);
     try t.expectString("{\"k1\":33,\"k2\":[true,{\"k3\":0.3211}]}", out);
 }

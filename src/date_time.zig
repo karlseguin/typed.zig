@@ -488,11 +488,13 @@ fn writeDate(into: []u8, date: Date) u8 {
     // the padding (we need to do it ourselfs)
     const year = date.year;
     if (year < 0) {
-        _ = std.fmt.formatIntBuf(into[1..], @as(u16, @intCast(year * -1)), 10, .lower, .{ .width = 4, .fill = '0' });
+        var stream = std.io.fixedBufferStream(into[1..]);
+        std.fmt.format(stream.writer(), "{d:0>4}", .{@as(u16, @intCast(year * -1))}) catch unreachable;
         into[0] = '-';
         buf = into[5..];
     } else {
-        _ = std.fmt.formatIntBuf(into, @as(u16, @intCast(year)), 10, .lower, .{ .width = 4, .fill = '0' });
+        var stream = std.io.fixedBufferStream(into);
+        std.fmt.format(stream.writer(), "{d:0>4}", .{@as(u16, @intCast(year))}) catch unreachable;
         buf = into[4..];
     }
 
@@ -519,12 +521,14 @@ fn writeTime(into: []u8, time: Time) u8 {
 
     if (@rem(micros, 1000) == 0) {
         into[8] = '.';
-        _ = std.fmt.formatIntBuf(into[9..12], micros / 1000, 10, .lower, .{ .width = 3, .fill = '0' });
+        var stream = std.io.fixedBufferStream(into[9..12]);
+        std.fmt.format(stream.writer(), "{d:0>3}", .{micros / 1000}) catch unreachable;
         return 12;
     }
 
     into[8] = '.';
-    _ = std.fmt.formatIntBuf(into[9..15], micros, 10, .lower, .{ .width = 6, .fill = '0' });
+    var stream = std.io.fixedBufferStream(into[9..15]);
+    std.fmt.format(stream.writer(), "{d:0>6}", .{micros}) catch unreachable;
     return 15;
 }
 
@@ -665,7 +669,7 @@ test "date: json" {
     {
         // date, positive year
         const date = Date{ .year = 2023, .month = 9, .day = 22 };
-        const out = try std.json.stringifyAlloc(t.allocator, Value{ .date = date }, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, Value{ .date = date }, .{});
         defer t.allocator.free(out);
         try t.expectString("\"2023-09-22\"", out);
     }
@@ -673,7 +677,7 @@ test "date: json" {
     {
         // date, negative year
         const date = Date{ .year = -4, .month = 12, .day = 3 };
-        const out = try std.json.stringifyAlloc(t.allocator, Value{ .date = date }, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, Value{ .date = date }, .{});
         defer t.allocator.free(out);
         try t.expectString("\"-0004-12-03\"", out);
     }
@@ -682,13 +686,19 @@ test "date: json" {
 test "date: format" {
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Date{ .year = 2023, .month = 5, .day = 22 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const date = Date{ .year = 2023, .month = 5, .day = 22 };
+        try date.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("2023-05-22", out);
     }
 
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Date{ .year = -102, .month = 12, .day = 9 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const date = Date{ .year = -102, .month = 12, .day = 9 };
+        try date.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("-0102-12-09", out);
     }
 }
@@ -829,7 +839,7 @@ test "time: json" {
     {
         // time no fraction
         const time = Time{ .hour = 23, .min = 59, .sec = 2 };
-        const out = try std.json.stringifyAlloc(t.allocator, Value{ .time = time }, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, Value{ .time = time }, .{});
         defer t.allocator.free(out);
         try t.expectString("\"23:59:02\"", out);
     }
@@ -837,7 +847,7 @@ test "time: json" {
     {
         // time, milliseconds only
         const time = Time{ .hour = 7, .min = 9, .sec = 32, .micros = 202000 };
-        const out = try std.json.stringifyAlloc(t.allocator, Value{ .time = time }, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, Value{ .time = time }, .{});
         defer t.allocator.free(out);
         try t.expectString("\"07:09:32.202\"", out);
     }
@@ -845,7 +855,7 @@ test "time: json" {
     {
         // time, micros
         const time = Time{ .hour = 1, .min = 2, .sec = 3, .micros = 123456 };
-        const out = try std.json.stringifyAlloc(t.allocator, Value{ .time = time }, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, Value{ .time = time }, .{});
         defer t.allocator.free(out);
         try t.expectString("\"01:02:03.123456\"", out);
     }
@@ -854,37 +864,55 @@ test "time: json" {
 test "time: format" {
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{ .hour = 23, .min = 59, .sec = 59, .micros = 0 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const time = Time{ .hour = 23, .min = 59, .sec = 59, .micros = 0 };
+        try time.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("23:59:59", out);
     }
 
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{ .hour = 8, .min = 9, .sec = 10, .micros = 12 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const time = Time{ .hour = 8, .min = 9, .sec = 10, .micros = 12 };
+        try time.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("08:09:10.000012", out);
     }
 
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{ .hour = 8, .min = 9, .sec = 10, .micros = 123 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const time = Time{ .hour = 8, .min = 9, .sec = 10, .micros = 123 };
+        try time.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("08:09:10.000123", out);
     }
 
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{ .hour = 8, .min = 9, .sec = 10, .micros = 1234 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const time = Time{ .hour = 8, .min = 9, .sec = 10, .micros = 1234 };
+        try time.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("08:09:10.001234", out);
     }
 
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{ .hour = 8, .min = 9, .sec = 10, .micros = 12345 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const time = Time{ .hour = 8, .min = 9, .sec = 10, .micros = 12345 };
+        try time.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("08:09:10.012345", out);
     }
 
     {
         var buf: [20]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{Time{ .hour = 8, .min = 9, .sec = 10, .micros = 123456 }});
+        var stream = std.io.fixedBufferStream(&buf);
+        const time = Time{ .hour = 8, .min = 9, .sec = 10, .micros = 123456 };
+        try time.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("08:09:10.123456", out);
     }
 }
@@ -1478,7 +1506,7 @@ test "DateTime: json" {
     {
         // DateTime, time no fraction
         const dt = try DateTime.parse("2023-09-22T23:59:02Z", .rfc3339);
-        const out = try std.json.stringifyAlloc(t.allocator, dt, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, dt, .{});
         defer t.allocator.free(out);
         try t.expectString("\"2023-09-22T23:59:02Z\"", out);
     }
@@ -1486,7 +1514,7 @@ test "DateTime: json" {
     {
         // time, milliseconds only
         const dt = try DateTime.parse("2023-09-22T07:09:32.202Z", .rfc3339);
-        const out = try std.json.stringifyAlloc(t.allocator, dt, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, dt, .{});
         defer t.allocator.free(out);
         try t.expectString("\"2023-09-22T07:09:32.202Z\"", out);
     }
@@ -1494,7 +1522,7 @@ test "DateTime: json" {
     {
         // time, micros
         const dt = try DateTime.parse("-0004-12-03T01:02:03.123456Z", .rfc3339);
-        const out = try std.json.stringifyAlloc(t.allocator, dt, .{});
+        const out = try std.json.Stringify.valueAlloc(t.allocator, dt, .{});
         defer t.allocator.free(out);
         try t.expectString("\"-0004-12-03T01:02:03.123456Z\"", out);
     }
@@ -1510,37 +1538,54 @@ test "DateTime: json" {
 test "DateTime: format" {
     {
         var buf: [30]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{try DateTime.initUTC(2023, 5, 22, 23, 59, 59, 0)});
+        var stream = std.io.fixedBufferStream(&buf);
+        const dt = try DateTime.initUTC(2023, 5, 22, 23, 59, 59, 0);
+        try dt.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("2023-05-22T23:59:59Z", out);
     }
 
     {
         var buf: [30]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{try DateTime.initUTC(2023, 5, 22, 8, 9, 10, 12)});
+        var stream = std.io.fixedBufferStream(&buf);
+        const dt = try DateTime.initUTC(2023, 5, 22, 8, 9, 10, 12);
+        try dt.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("2023-05-22T08:09:10.000012Z", out);
     }
 
     {
         var buf: [30]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{try DateTime.initUTC(2023, 5, 22, 8, 9, 10, 123)});
+        var stream = std.io.fixedBufferStream(&buf);
+        const dt = try DateTime.initUTC(2023, 5, 22, 8, 9, 10, 123);
+        try dt.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("2023-05-22T08:09:10.000123Z", out);
     }
 
     {
         var buf: [30]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{try DateTime.initUTC(2023, 5, 22, 8, 9, 10, 1234)});
+        var stream = std.io.fixedBufferStream(&buf);
+        const dt = try DateTime.initUTC(2023, 5, 22, 8, 9, 10, 1234);
+        try dt.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("2023-05-22T08:09:10.001234Z", out);
     }
 
     {
         var buf: [30]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{try DateTime.initUTC(-102, 12, 9, 8, 9, 10, 12345)});
+        var stream = std.io.fixedBufferStream(&buf);
+        const dt = try DateTime.initUTC(-102, 12, 9, 8, 9, 10, 12345);
+        try dt.format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("-0102-12-09T08:09:10.012345Z", out);
     }
 
     {
         var buf: [30]u8 = undefined;
-        const out = try std.fmt.bufPrint(&buf, "{s}", .{try DateTime.initUTC(-102, 12, 9, 8, 9, 10, 123456)});
+        var stream = std.io.fixedBufferStream(&buf);
+        try (try DateTime.initUTC(-102, 12, 9, 8, 9, 10, 123456)).format("", .{}, stream.writer());
+        const out = stream.getWritten();
         try t.expectString("-0102-12-09T08:09:10.123456Z", out);
     }
 }
@@ -1908,7 +1953,9 @@ test "DateTime: add" {
 
 fn expectDateTime(expected: []const u8, dt: DateTime) !void {
     var buf: [30]u8 = undefined;
-    const actual = try std.fmt.bufPrint(&buf, "{s}", .{dt});
+    var stream = std.io.fixedBufferStream(&buf);
+    try dt.format("", .{}, stream.writer());
+    const actual = stream.getWritten();
     try t.expectString(expected, actual);
 }
 
