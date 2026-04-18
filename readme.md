@@ -2,6 +2,9 @@
 
 A tagged union type that can represent many different types. Similar to `std.json.Value`, but supports more types and has more functionality.
 
+## Zig Version
+This is for Zig 0.16.0. Use the [zig-0.15](https://github.com/karlseguin/typed.zig/tree/zig-0.15) branch for Zig 0.15 or the [dev](https://github.com/karlseguin/typed.zig/tree/dev) which may or may not be up to date with zig dev.
+
 ## typed.Value
 `typed.Value` is a union defined with the following tags:
 

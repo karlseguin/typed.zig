@@ -187,7 +187,7 @@ test "map: array" {
     var map = Map.init(t.allocator);
     defer map.deinit();
 
-    var child = Array{};
+    var child: Array = .empty;
     try child.append(t.allocator, .{ .i32 = 32 });
     try map.put("child", child);
 
@@ -225,20 +225,20 @@ test "map: putAssumeCapacity" {
 
 test "map: fromJson" {
     const json = std.json;
-    var json_object1 = json.ObjectMap.init(t.allocator);
-    defer json_object1.deinit();
+    var json_object1: json.ObjectMap = .empty;
+    defer json_object1.deinit(t.allocator);
 
-    var json_object2 = json.ObjectMap.init(t.allocator);
-    defer json_object2.deinit();
-    try json_object2.put("k3", json.Value{ .float = 0.3211 });
+    var json_object2: json.ObjectMap = .empty;
+    defer json_object2.deinit(t.allocator);
+    try json_object2.put(t.allocator, "k3", json.Value{ .float = 0.3211 });
 
     var json_array = json.Array.init(t.allocator);
     defer json_array.deinit();
     try json_array.append(.{ .bool = true });
     try json_array.append(.{ .object = json_object2 });
 
-    try json_object1.put("k1", json.Value{ .integer = 33 });
-    try json_object1.put("k2", json.Value{ .array = json_array });
+    try json_object1.put(t.allocator, "k1", json.Value{ .integer = 33 });
+    try json_object1.put(t.allocator, "k2", json.Value{ .array = json_array });
 
     var tm2 = try Map.fromJson(t.allocator, json_object1);
 

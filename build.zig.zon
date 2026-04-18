@@ -1,7 +1,13 @@
 .{
-	.name = .typed,
-	.fingerprint = 0xdae30cf717a5b21a,
-	.paths = .{""},
-	.version = "0.0.0",
-	.dependencies = .{},
+    .name = .typed,
+    .fingerprint = 0xdae30cf717a5b21a,
+    .paths = .{
+        "LICENSE",
+        "build.zig",
+        "build.zig.zon",
+        "readme.md",
+        "src",
+    },
+    .version = "0.16.0",
+    .dependencies = .{},
 }

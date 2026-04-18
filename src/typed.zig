@@ -51,7 +51,7 @@ pub fn fromJson(allocator: Allocator, optional_value: ?std.json.Value) anyerror!
         .number_string => |s| return .{ .string = s }, // TODO: decide how to handle this
         .string => |s| return .{ .string = s },
         .array => |arr| {
-            var ta = Array{};
+            var ta = Array.empty;
             try ta.ensureTotalCapacity(allocator, arr.items.len);
             for (arr.items) |json_value| {
                 ta.appendAssumeCapacity(try fromJson(allocator, json_value));
@@ -114,7 +114,7 @@ pub fn new(allocator: Allocator, value: anytype) !Value {
                 const child = ptr.child;
                 if (child == u8) return .{ .string = slice };
 
-                var arr = Array{};
+                var arr: Array = .empty;
                 try arr.ensureTotalCapacity(allocator, slice.len);
                 for (slice) |v| {
                     arr.appendAssumeCapacity(try new(allocator, v));
@@ -163,7 +163,7 @@ test "typed: new" {
     try t.expectString("over 9000", (try new(undefined, "over 9000")).string);
 
     {
-        var list = std.ArrayList(u8){};
+        var list: std.ArrayList(u8) = .empty;
         defer list.deinit(t.allocator);
         try list.appendSlice(t.allocator, "i love keemun");
         try t.expectString("i love keemun", (try new(undefined, list.items)).string);
@@ -211,20 +211,20 @@ test "typed: fromJson" {
     }
 
     {
-        var json_object1 = json.ObjectMap.init(t.allocator);
-        defer json_object1.deinit();
+        var json_object1: json.ObjectMap = .empty;
+        defer json_object1.deinit(t.allocator);
 
-        var json_object2 = json.ObjectMap.init(t.allocator);
-        defer json_object2.deinit();
-        try json_object2.put("k3", json.Value{ .float = 0.3211 });
+        var json_object2: json.ObjectMap = .empty;
+        defer json_object2.deinit(t.allocator);
+        try json_object2.put(t.allocator, "k3", json.Value{ .float = 0.3211 });
 
         var json_array = json.Array.init(t.allocator);
         defer json_array.deinit();
         try json_array.append(.{ .bool = true });
         try json_array.append(.{ .object = json_object2 });
 
-        try json_object1.put("k1", json.Value{ .integer = 33 });
-        try json_object1.put("k2", json.Value{ .array = json_array });
+        try json_object1.put(t.allocator, "k1", json.Value{ .integer = 33 });
+        try json_object1.put(t.allocator, "k2", json.Value{ .array = json_array });
 
         var tm = (try fromJson(t.allocator, json.Value{ .object = json_object1 })).map;
         defer tm.deinit();
